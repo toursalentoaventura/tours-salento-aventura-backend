@@ -4,6 +4,7 @@ const tourRoutes = require('./tour.routes');
 const authRoutes = require('./auth.routes');
 const reservaRoutes = require('./reserva.routes');
 const pagoRoutes = require('./pago.routes');
+const contactoRoutes = require('./contacto.routes');
 const router = express.Router();
 
 /**
@@ -55,5 +56,12 @@ router.use('/reservas', reservaRoutes);
  * /api/pagos
  */
 router.use('/pagos', pagoRoutes);
+/**
+ * Rutas del módulo de contacto.
+ *
+ * Endpoint base:
+ * /api/contacto
+ */
+router.use('/contacto', contactoRoutes);
 
 module.exports = router;
