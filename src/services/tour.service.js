@@ -60,7 +60,104 @@ const generarTraduccionesTour = async (tour) => {
  *
  * Aquí se maneja la lógica de base de datos:
  * creación del tour principal y sus relaciones.
+ * 
+ * 
+ * 
  */
+/**
+ * Normaliza el código de idioma recibido.
+ *
+ * Ejemplos:
+ * en-US -> en
+ * es-CO -> es
+ */
+const normalizarIdioma = (idioma = 'es') => {
+  return String(idioma)
+    .trim()
+    .toLowerCase()
+    .split('-')[0];
+};
+
+/**
+ * Aplica la traducción guardada sobre los datos originales del tour.
+ *
+ * Si el idioma es español o no existe una traducción,
+ * devuelve el contenido original.
+ */
+const aplicarTraduccionTour = (tour, idioma = 'es') => {
+  if (!tour) return null;
+
+  const idiomaNormalizado = normalizarIdioma(idioma);
+
+  /**
+   * Convierte la instancia de Sequelize en un objeto normal.
+   */
+  const tourPlano =
+    typeof tour.toJSON === 'function'
+      ? tour.toJSON()
+      : tour;
+
+  /**
+   * Español corresponde al contenido original del tour.
+   */
+  if (idiomaNormalizado === 'es') {
+    return {
+      ...tourPlano,
+      idioma_actual: 'es',
+    };
+  }
+
+  const traducciones = Array.isArray(tourPlano.traducciones)
+    ? tourPlano.traducciones
+    : [];
+
+  const traduccionEncontrada = traducciones.find(
+    (traduccion) =>
+      normalizarIdioma(traduccion.idioma) === idiomaNormalizado
+  );
+
+  /**
+   * Si el tour todavía no tiene traducción para ese idioma,
+   * se utiliza el contenido original en español.
+   */
+  if (!traduccionEncontrada?.contenido) {
+    return {
+      ...tourPlano,
+      idioma_actual: 'es',
+      traduccion_disponible: false,
+    };
+  }
+
+  let contenidoTraducido = traduccionEncontrada.contenido;
+
+  /**
+   * Dependiendo del tipo de columna Sequelize,
+   * contenido puede llegar como objeto o como texto JSON.
+   */
+  if (typeof contenidoTraducido === 'string') {
+    try {
+      contenidoTraducido = JSON.parse(contenidoTraducido);
+    } catch (error) {
+      console.error(
+        `La traducción del tour ${tourPlano.id} no contiene JSON válido:`,
+        error
+      );
+
+      return {
+        ...tourPlano,
+        idioma_actual: 'es',
+        traduccion_disponible: false,
+      };
+    }
+  }
+
+  return {
+    ...tourPlano,
+    ...contenidoTraducido,
+    idioma_actual: idiomaNormalizado,
+    traduccion_disponible: true,
+  };
+};
 const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
   const transaccion = await sequelize.transaction();
 
@@ -258,10 +355,9 @@ const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
 /**
  * Servicio para listar todos los tours.
  *
- * Retorna los tours junto con su información relacionada:
- * precios, imágenes, fechas no disponibles, detalles, itinerario y horarios.
+ * Retorna los tours utilizando el idioma solicitado.
  */
-const listarTours = async () => {
+const listarTours = async (idioma = 'es') => {
   const tours = await Tour.findAll({
     include: [
       { model: PrecioTour, as: 'precios' },
@@ -271,20 +367,20 @@ const listarTours = async () => {
       { model: ItinerarioTour, as: 'itinerario' },
       { model: HorarioTour, as: 'horarios' },
       { model: ExtraTour, as: 'extras' },
-      { model: TraduccionTour, as: 'traducciones' }
+      { model: TraduccionTour, as: 'traducciones' },
     ],
-    order: [['id', 'DESC']]
+    order: [['id', 'DESC']],
   });
 
-  return tours;
+  return tours.map((tour) => aplicarTraduccionTour(tour, idioma));
 };
 
 /**
  * Servicio para obtener un tour por su ID.
  *
- * Busca un tour específico y devuelve toda su información relacionada.
+ * Devuelve el tour en el idioma solicitado.
  */
-const obtenerTourPorId = async (id) => {
+const obtenerTourPorId = async (id, idioma = 'es') => {
   const tour = await Tour.findByPk(id, {
     include: [
       { model: PrecioTour, as: 'precios' },
@@ -294,11 +390,11 @@ const obtenerTourPorId = async (id) => {
       { model: ItinerarioTour, as: 'itinerario' },
       { model: HorarioTour, as: 'horarios' },
       { model: ExtraTour, as: 'extras' },
-      { model: TraduccionTour, as: 'traducciones' }
-    ]
+      { model: TraduccionTour, as: 'traducciones' },
+    ],
   });
 
-  return tour;
+  return aplicarTraduccionTour(tour, idioma);
 };
 
 

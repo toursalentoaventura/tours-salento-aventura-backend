@@ -86,17 +86,22 @@ const crearTour = async (req, res) => {
 /**
  * Controlador para listar tours.
  *
- * Solicita al servicio todos los tours registrados
- * y los devuelve al frontend con su información relacionada.
+ * Recibe opcionalmente el idioma mediante query params.
+ *
+ * Ejemplo:
+ * GET /api/tours?idioma=en
  */
 const listarTours = async (req, res) => {
   try {
-    const tours = await listarToursService();
+    const idioma = req.query.idioma || 'es';
+
+    const tours = await listarToursService(idioma);
 
     return res.status(200).json({
       ok: true,
       message: 'Tours consultados correctamente',
-      tours
+      idioma,
+      tours,
     });
   } catch (error) {
     console.error('Error al listar tours:', error);
@@ -104,7 +109,7 @@ const listarTours = async (req, res) => {
     return res.status(500).json({
       ok: false,
       message: 'Error al consultar los tours',
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -112,36 +117,37 @@ const listarTours = async (req, res) => {
 /**
  * Controlador para obtener un tour por ID.
  *
- * Valida el ID recibido por parámetro y consulta el tour
- * junto con sus precios, imágenes, detalles, itinerario y horarios.
+ * Permite consultar el tour en un idioma específico.
+ *
+ * Ejemplo:
+ * GET /api/tours/1?idioma=en
  */
 const obtenerTourPorId = async (req, res) => {
   try {
     const { id } = req.params;
+    const idioma = req.query.idioma || 'es';
 
-    /**
-     * Validación básica para evitar búsquedas con IDs inválidos.
-     */
     if (!id || isNaN(Number(id))) {
       return res.status(400).json({
         ok: false,
-        message: 'El ID del tour no es válido'
+        message: 'El ID del tour no es válido',
       });
     }
 
-    const tour = await obtenerTourPorIdService(id);
+    const tour = await obtenerTourPorIdService(id, idioma);
 
     if (!tour) {
       return res.status(404).json({
         ok: false,
-        message: 'Tour no encontrado'
+        message: 'Tour no encontrado',
       });
     }
 
     return res.status(200).json({
       ok: true,
       message: 'Tour consultado correctamente',
-      tour
+      idioma,
+      tour,
     });
   } catch (error) {
     console.error('Error al obtener tour:', error);
@@ -149,7 +155,7 @@ const obtenerTourPorId = async (req, res) => {
     return res.status(500).json({
       ok: false,
       message: 'Error al consultar el tour',
-      error: error.message
+      error: error.message,
     });
   }
 };
