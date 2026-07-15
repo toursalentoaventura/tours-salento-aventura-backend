@@ -36,22 +36,28 @@ const obtenerIdiomasDestino = () => {
  * y luego crea traducciones nuevas con la información actualizada.
  */
 const generarTraduccionesTour = async (tour) => {
-  const idiomasDestino = obtenerIdiomasDestino();
+  try {
+    const idiomasDestino = obtenerIdiomasDestino();
 
-  await TraduccionTour.destroy({
-    where: {
-      id_tour: tour.id
-    }
-  });
-
-  for (const idioma of idiomasDestino) {
-    const contenidoTraducido = await traducirTour(tour, idioma);
-
-    await TraduccionTour.create({
-      id_tour: tour.id,
-      idioma,
-      contenido: contenidoTraducido
+    await TraduccionTour.destroy({
+      where: {
+        id_tour: tour.id
+      }
     });
+
+    for (const idioma of idiomasDestino) {
+      const contenidoTraducido = await traducirTour(tour, idioma);
+
+      await TraduccionTour.create({
+        id_tour: tour.id,
+        idioma,
+        contenido: contenidoTraducido
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    console.error(error.stack);
+    throw error;
   }
 };
 
@@ -346,6 +352,8 @@ const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
     /**
      * Si ocurre un error, se revierten todos los cambios.
      */
+    console.error(error);
+    console.error(error.stack);
     await transaccion.rollback();
     throw error;
   }
@@ -723,6 +731,14 @@ const eliminarTourPorId = async (id) => {
     await ExtraTour.destroy({
     where: { id_tour: id },
     transaction: transaccion
+    });
+
+    /**
+     * Se eliminan las traducciones asociadas al tour.
+     */
+    await TraduccionTour.destroy({
+      where: { id_tour: id },
+      transaction: transaccion
     });
 
     /**

@@ -73,6 +73,8 @@ const crearTour = async (req, res) => {
     });
   } catch (error) {
     console.error('Error al crear tour:', error);
+    console.error(error);
+    console.error(error.stack);
 
     return res.status(500).json({
       ok: false,

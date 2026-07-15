@@ -7,22 +7,28 @@ const cloudinary = require('../config/cloudinary');
  * y lo envía a Cloudinary.
  */
 const subirImagenCloudinary = async (file) => {
-  const base64 = file.buffer.toString('base64');
-  const dataUri = `data:${file.mimetype};base64,${base64}`;
+  try {
+    const base64 = file.buffer.toString('base64');
+    const dataUri = `data:${file.mimetype};base64,${base64}`;
 
-  const resultado = await cloudinary.uploader.upload(dataUri, {
-    folder: process.env.CLOUDINARY_FOLDER || 'tour_salento_aventura/tours',
-    resource_type: 'image'
-  });
+    const resultado = await cloudinary.uploader.upload(dataUri, {
+      folder: process.env.CLOUDINARY_FOLDER || 'tour_salento_aventura/tours',
+      resource_type: 'image'
+    });
 
-  return {
-    url_imagen: resultado.secure_url,
-    public_id_cloudinary: resultado.public_id,
-    formato: resultado.format,
-    ancho: resultado.width,
-    alto: resultado.height,
-    bytes: resultado.bytes
-  };
+    return {
+      url_imagen: resultado.secure_url,
+      public_id_cloudinary: resultado.public_id,
+      formato: resultado.format,
+      ancho: resultado.width,
+      alto: resultado.height,
+      bytes: resultado.bytes
+    };
+  } catch (error) {
+    console.error(error);
+    console.error(error.stack);
+    throw error;
+  }
 };
 
 /**

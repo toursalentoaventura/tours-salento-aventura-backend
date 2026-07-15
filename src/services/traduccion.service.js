@@ -14,12 +14,18 @@ const traducirTexto = async (texto, idiomaDestino = 'en') => {
     return texto;
   }
 
-  const [traduccion] = await translate.translate(texto, {
-    from: process.env.GOOGLE_TRANSLATE_SOURCE || 'es',
-    to: idiomaDestino
-  });
+  try {
+    const [traduccion] = await translate.translate(texto, {
+      from: process.env.GOOGLE_TRANSLATE_SOURCE || 'es',
+      to: idiomaDestino
+    });
 
-  return traduccion;
+    return traduccion;
+  } catch (error) {
+    console.error(error);
+    console.error(error.stack);
+    throw error;
+  }
 };
 
 /**
