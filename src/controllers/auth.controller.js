@@ -6,17 +6,17 @@ const {
 /**
  * Controlador para registrar un administrador.
  *
- * Recibe nombre, correo y contraseña.
+ * Recibe nombre, correo, contraseña y código de autorización.
  * Este endpoint será útil para crear el primer administrador del sistema.
  */
 const registrar = async (req, res) => {
   try {
-    const { nombre, correo, contrasena } = req.body;
+    const { nombre, correo, contrasena, codigoAutorizacion } = req.body;
 
-    if (!nombre || !correo || !contrasena) {
+    if (!nombre || !correo || !contrasena || !codigoAutorizacion?.trim()) {
       return res.status(400).json({
         ok: false,
-        message: 'Nombre, correo y contraseña son obligatorios'
+        message: 'Completa todos los campos obligatorios'
       });
     }
 

@@ -37,12 +37,22 @@ const subirImagenCloudinary = async (file) => {
 const subirMultiplesImagenesCloudinary = async (files) => {
   const imagenesSubidas = [];
 
-  for (const file of files) {
-    const imagen = await subirImagenCloudinary(file);
-    imagenesSubidas.push(imagen);
-  }
+  try {
+    for (const file of files) {
+      const imagen = await subirImagenCloudinary(file);
+      imagenesSubidas.push(imagen);
+    }
 
-  return imagenesSubidas;
+    return imagenesSubidas;
+  } catch (error) {
+    await Promise.allSettled(
+      imagenesSubidas
+        .filter((imagen) => imagen.public_id_cloudinary)
+        .map((imagen) => eliminarImagenCloudinary(imagen.public_id_cloudinary))
+    );
+
+    throw error;
+  }
 };
 
 /**

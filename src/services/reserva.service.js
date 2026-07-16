@@ -1,6 +1,7 @@
 const { Op } = require('sequelize');
 
 const {
+  sequelize,
   Reserva,
   Tour,
   PrecioTour,
@@ -192,61 +193,79 @@ const crearReserva = async (datosReserva) => {
    *   }
    * ]
    */
-  const extrasSeleccionados = [];
+  const idReservaCreada = await sequelize.transaction(async (transaccion) => {
+    const extrasSeleccionados = [];
 
-  if (Array.isArray(extras) && extras.length > 0) {
-    for (const extraSeleccionado of extras) {
-      const extraTour = await ExtraTour.findOne({
-        where: {
-          id: extraSeleccionado.id_extra_tour,
-          id_tour,
-          activo: true
-        }
-      });
+    if (Array.isArray(extras) && extras.length > 0) {
+      const idsExtras = [
+        ...new Set(
+          extras
+            .map((extra) => Number(extra.id_extra_tour || extra.id_extra))
+            .filter(Number.isInteger)
+        )
+      ];
 
-      if (!extraTour) {
-        const error = new Error('Uno de los extras seleccionados no pertenece al tour o no está activo');
+      if (idsExtras.length !== extras.length) {
+        const error = new Error('Uno de los extras seleccionados no está disponible');
         error.statusCode = 400;
         throw error;
       }
 
-      const cantidadExtra = Number(extraSeleccionado.cantidad || 1);
-      const subtotal = Number(extraTour.precio) * cantidadExtra;
-
-      valor_total += subtotal;
-
-      extrasSeleccionados.push({
-        id_extra_tour: extraTour.id,
-        nombre: extraTour.nombre,
-        cantidad: cantidadExtra,
-        precio_unitario: Number(extraTour.precio),
-        subtotal
+      const extrasValidos = await ExtraTour.findAll({
+        where: {
+          id: { [Op.in]: idsExtras },
+          id_tour,
+          activo: true
+        },
+        transaction: transaccion
       });
-    }
-  }
 
-  /**
-   * Creamos la reserva.
-   */
-  const reserva = await Reserva.create({
-    id_tour,
-    id_precio_tour,
-    id_horario_tour: idHorarioReserva,
-    nombre_cliente,
-    correo_cliente,
-    telefono_cliente,
-    documento_cliente: documento_cliente || null,
-    fecha_reserva,
-    cantidad_personas: cantidadPersonasNumero,
-    idioma: idioma || 'Español',
-    valor_total,
-    extras_seleccionados: extrasSeleccionados,
-    estado_reserva: 'pendiente',
-    estado_pago: 'pendiente',
-    observaciones: observaciones || 'Sin observaciones'
+      if (extrasValidos.length !== idsExtras.length) {
+        const error = new Error('Uno de los extras seleccionados no está disponible');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      for (const extraTour of extrasValidos) {
+        const subtotal = Number(extraTour.precio);
+
+        valor_total += subtotal;
+
+        extrasSeleccionados.push({
+          id_extra_tour: extraTour.id,
+          nombre: extraTour.nombre,
+          cantidad: 1,
+          precio_unitario: Number(extraTour.precio),
+          subtotal
+        });
+      }
+    }
+
+    const reserva = await Reserva.create(
+      {
+        id_tour,
+        id_precio_tour,
+        id_horario_tour: idHorarioReserva,
+        nombre_cliente,
+        correo_cliente,
+        telefono_cliente,
+        documento_cliente: documento_cliente || null,
+        fecha_reserva,
+        cantidad_personas: cantidadPersonasNumero,
+        idioma: idioma || 'Español',
+        valor_total,
+        extras_seleccionados: extrasSeleccionados,
+        estado_reserva: 'pendiente',
+        estado_pago: 'pendiente',
+        observaciones: observaciones || 'Sin observaciones'
+      },
+      { transaction: transaccion }
+    );
+
+    return reserva.id;
   });
 
-  return obtenerReservaPorId(reserva.id);
+  return obtenerReservaPorId(idReservaCreada);
 };
 
 /**

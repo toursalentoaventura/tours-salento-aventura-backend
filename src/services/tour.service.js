@@ -10,7 +10,10 @@ const {
   ExtraTour,
   TraduccionTour
 } = require('../models');
-const { subirMultiplesImagenesCloudinary } = require('./imagen.service');
+const {
+  subirMultiplesImagenesCloudinary,
+  eliminarImagenCloudinary
+} = require('./imagen.service');
 const { traducirTour } = require('./traduccion.service');
 
 
@@ -27,6 +30,37 @@ const obtenerIdiomasDestino = () => {
     .split(',')
     .map((idioma) => idioma.trim())
     .filter((idioma) => idioma.length > 0);
+};
+
+/**
+ * Valida y normaliza extras recibidos desde el formulario administrativo.
+ * Todos los precios se conservan como valores reales en COP.
+ */
+const normalizarExtrasTour = (extras = []) => {
+  return extras.map((extra) => {
+    const nombre = String(extra.nombre || '').trim();
+    const precio = Number(extra.precio);
+
+    if (!nombre) {
+      const error = new Error('Cada extra debe tener un nombre');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (!Number.isFinite(precio) || precio < 0) {
+      const error = new Error('El precio de cada extra debe ser un número mayor o igual a cero');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return {
+      id: extra.id ? Number(extra.id) : null,
+      nombre,
+      descripcion: String(extra.descripcion || '').trim() || null,
+      precio,
+      activo: extra.activo !== false
+    };
+  });
 };
 
 /**
@@ -155,6 +189,19 @@ const aplicarTraduccionTour = (tour, idioma = 'es') => {
         traduccion_disponible: false,
       };
     }
+  }
+
+  if (Array.isArray(contenidoTraducido.extras)) {
+    const idsExtrasIncluidos = new Set(
+      (tourPlano.extras || []).map((extra) => Number(extra.id))
+    );
+
+    contenidoTraducido = {
+      ...contenidoTraducido,
+      extras: contenidoTraducido.extras.filter((extra) =>
+        idsExtrasIncluidos.has(Number(extra.id))
+      )
+    };
   }
 
   return {
@@ -311,7 +358,7 @@ const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
      * Se registran los extras disponibles para el tour.
      */
     if (extras.length > 0) {
-    const extrasData = extras.map((extra) => ({
+    const extrasData = normalizarExtrasTour(extras).map((extra) => ({
         id_tour: nuevoTour.id,
         nombre: extra.nombre,
         descripcion: extra.descripcion || null,
@@ -374,7 +421,7 @@ const listarTours = async (idioma = 'es') => {
       { model: DetalleTour, as: 'detalles' },
       { model: ItinerarioTour, as: 'itinerario' },
       { model: HorarioTour, as: 'horarios' },
-      { model: ExtraTour, as: 'extras' },
+      { model: ExtraTour, as: 'extras', where: { activo: true }, required: false },
       { model: TraduccionTour, as: 'traducciones' },
     ],
     order: [['id', 'DESC']],
@@ -388,7 +435,7 @@ const listarTours = async (idioma = 'es') => {
  *
  * Devuelve el tour en el idioma solicitado.
  */
-const obtenerTourPorId = async (id, idioma = 'es') => {
+const obtenerTourPorId = async (id, idioma = 'es', incluirInactivos = false) => {
   const tour = await Tour.findByPk(id, {
     include: [
       { model: PrecioTour, as: 'precios' },
@@ -397,7 +444,11 @@ const obtenerTourPorId = async (id, idioma = 'es') => {
       { model: DetalleTour, as: 'detalles' },
       { model: ItinerarioTour, as: 'itinerario' },
       { model: HorarioTour, as: 'horarios' },
-      { model: ExtraTour, as: 'extras' },
+      {
+        model: ExtraTour,
+        as: 'extras',
+        ...(incluirInactivos ? {} : { where: { activo: true }, required: false })
+      },
       { model: TraduccionTour, as: 'traducciones' },
     ],
   });
@@ -415,6 +466,8 @@ const obtenerTourPorId = async (id, idioma = 'es') => {
  */
 const actualizarTourCompleto = async (id, datosTour, archivosImagenes = []) => {
   const transaccion = await sequelize.transaction();
+  let imagenesNuevasCloudinary = [];
+  let imagenesRetiradas = [];
 
   try {
     const tour = await Tour.findByPk(id, { transaction: transaccion });
@@ -432,6 +485,8 @@ const actualizarTourCompleto = async (id, datosTour, archivosImagenes = []) => {
       precios,
       imagenes,
       imagenes_existentes,
+      imagenes_nuevas_metadata,
+      actualizar_imagenes,
       fechas_no_disponibles,
       detalles,
       itinerario,
@@ -492,65 +547,76 @@ const actualizarTourCompleto = async (id, datosTour, archivosImagenes = []) => {
     }
 
     /**
-     * Actualización de imágenes del tour.
-     *
-     * Importante:
-     * - No se eliminan imágenes existentes.
-     * - No se vuelven a subir imágenes antiguas.
-     * - Solo se suben a Cloudinary los archivos nuevos recibidos por Multer.
-     * - Las imágenes anteriores quedan intactas en la base de datos.
+     * Reconcilia la galería únicamente cuando el frontend informa que fue
+     * modificada. Los IDs recibidos representan exactamente las imágenes que
+     * deben conservarse; las demás se retiran de la base de datos.
      */
-
-    /**
-     * Permite actualizar datos de imágenes existentes,
-     * por ejemplo cambiar cuál imagen es portada.
-     *
-     * Este proceso NO sube imágenes a Cloudinary.
-     */
-    if (Array.isArray(imagenes_existentes)) {
-    for (const imagen of imagenes_existentes) {
-        if (imagen.id) {
-        await ImagenTour.update(
-            {
-            es_portada: imagen.es_portada !== undefined ? imagen.es_portada : false
-            },
-            {
-            where: {
-                id: imagen.id,
-                id_tour: id
-            },
-            transaction: transaccion
-            }
-        );
-        }
-    }
-    }
-
-    /**
-     * Si llegan archivos nuevos, solo esos archivos se suben a Cloudinary.
-     */
-    if (archivosImagenes.length > 0) {
-    const imagenesCloudinary = await subirMultiplesImagenesCloudinary(archivosImagenes);
-
-    /**
-     * Verificamos cuántas imágenes ya tiene el tour.
-     * Si no tiene ninguna, la primera nueva queda como portada.
-     */
-    const cantidadImagenesActuales = await ImagenTour.count({
+    if (actualizar_imagenes && Array.isArray(imagenes_existentes)) {
+      const imagenesActuales = await ImagenTour.findAll({
         where: { id_tour: id },
         transaction: transaccion
-    });
+      });
+      const idsConservados = new Set(
+        imagenes_existentes
+          .map((imagen) => Number(imagen.id))
+          .filter(Number.isInteger)
+      );
 
-    const imagenesData = imagenesCloudinary.map((imagen, index) => ({
+      imagenesRetiradas = imagenesActuales.filter(
+        (imagen) => !idsConservados.has(Number(imagen.id))
+      );
+
+      if (imagenesRetiradas.length > 0) {
+        await ImagenTour.destroy({
+          where: { id: imagenesRetiradas.map((imagen) => imagen.id), id_tour: id },
+          transaction: transaccion
+        });
+      }
+
+      for (const imagen of imagenes_existentes) {
+        if (!idsConservados.has(Number(imagen.id))) continue;
+
+        await ImagenTour.update(
+          { es_portada: Boolean(imagen.es_portada) },
+          {
+            where: { id: imagen.id, id_tour: id },
+            transaction: transaccion
+          }
+        );
+      }
+    }
+
+    /**
+     * Sube y registra exclusivamente los archivos nuevos. La metadata conserva
+     * la portada elegida en el formulario sin reenviar imágenes existentes.
+     */
+    if (archivosImagenes.length > 0) {
+      imagenesNuevasCloudinary = await subirMultiplesImagenesCloudinary(
+        archivosImagenes
+      );
+      const metadataNuevas = Array.isArray(imagenes_nuevas_metadata)
+        ? imagenes_nuevas_metadata
+        : [];
+      const cantidadImagenesConservadas = await ImagenTour.count({
+        where: { id_tour: id },
+        transaction: transaccion
+      });
+      const existePortadaNueva = metadataNuevas.some((imagen) =>
+        Boolean(imagen.es_portada)
+      );
+
+      const imagenesData = imagenesNuevasCloudinary.map((imagen, index) => ({
         id_tour: id,
         url_imagen: imagen.url_imagen,
         public_id_cloudinary: imagen.public_id_cloudinary,
-        es_portada: cantidadImagenesActuales === 0 && index === 0
-    }));
+        es_portada:
+          Boolean(metadataNuevas[index]?.es_portada) ||
+          (cantidadImagenesConservadas === 0 && !existePortadaNueva && index === 0)
+      }));
 
-    await ImagenTour.bulkCreate(imagenesData, {
+      await ImagenTour.bulkCreate(imagenesData, {
         transaction: transaccion
-    });
+      });
     }
 
     /**
@@ -626,23 +692,74 @@ const actualizarTourCompleto = async (id, datosTour, archivosImagenes = []) => {
       await HorarioTour.bulkCreate(horariosData, { transaction: transaccion });
     }
     /**
-     * Si se envían extras, se reemplazan los extras anteriores.
+     * Reconcilia los extras por ID: actualiza los existentes, crea los nuevos
+     * y elimina únicamente los que fueron retirados del formulario.
      */
     if (Array.isArray(extras)) {
-    await ExtraTour.destroy({
+      const extrasNormalizados = normalizarExtrasTour(extras);
+      const extrasActuales = await ExtraTour.findAll({
         where: { id_tour: id },
         transaction: transaccion
-    });
+      });
+      const idsActuales = new Set(extrasActuales.map((extra) => Number(extra.id)));
+      const idsConservados = new Set();
 
-    const extrasData = extras.map((extra) => ({
-        id_tour: id,
-        nombre: extra.nombre,
-        descripcion: extra.descripcion || null,
-        precio: extra.precio,
-        activo: extra.activo !== undefined ? extra.activo : true
-    }));
+      for (const extra of extrasNormalizados) {
+        if (extra.id) {
+          if (!idsActuales.has(extra.id)) {
+            const error = new Error('Uno de los extras no pertenece al tour');
+            error.statusCode = 400;
+            throw error;
+          }
 
-    await ExtraTour.bulkCreate(extrasData, { transaction: transaccion });
+          idsConservados.add(extra.id);
+          await ExtraTour.update(
+            {
+              nombre: extra.nombre,
+              descripcion: extra.descripcion,
+              precio: extra.precio,
+              activo: extra.activo
+            },
+            {
+              where: { id: extra.id, id_tour: id },
+              transaction: transaccion
+            }
+          );
+        } else {
+          await ExtraTour.create(
+            {
+              id_tour: id,
+              nombre: extra.nombre,
+              descripcion: extra.descripcion,
+              precio: extra.precio,
+              activo: extra.activo
+            },
+            { transaction: transaccion }
+          );
+        }
+      }
+
+      const idsRetirados = extrasActuales
+        .map((extra) => Number(extra.id))
+        .filter((idExtra) => !idsConservados.has(idExtra));
+
+      if (idsRetirados.length > 0) {
+        await ExtraTour.destroy({
+          where: { id: idsRetirados, id_tour: id },
+          transaction: transaccion
+        });
+      }
+    }
+
+    /**
+     * Los registros se eliminan primero dentro de la transacción. Cuando todas
+     * las operaciones de base de datos han sido exitosas, se retiran los
+     * recursos correspondientes de Cloudinary antes de confirmar el cambio.
+     */
+    for (const imagen of imagenesRetiradas) {
+      if (imagen.public_id_cloudinary) {
+        await eliminarImagenCloudinary(imagen.public_id_cloudinary);
+      }
     }
 
     await transaccion.commit();
@@ -664,7 +781,16 @@ const actualizarTourCompleto = async (id, datosTour, archivosImagenes = []) => {
 
     return tourConTraducciones;
   } catch (error) {
-    await transaccion.rollback();
+    if (!transaccion.finished) {
+      await transaccion.rollback();
+
+      await Promise.allSettled(
+        imagenesNuevasCloudinary
+          .filter((imagen) => imagen.public_id_cloudinary)
+          .map((imagen) => eliminarImagenCloudinary(imagen.public_id_cloudinary))
+      );
+    }
+
     throw error;
   }
 };

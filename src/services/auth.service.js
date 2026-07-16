@@ -10,15 +10,30 @@ const { Administrador } = require('../models');
  * La contraseña se guarda encriptada, nunca en texto plano.
  */
 const registrarAdministrador = async (datos) => {
-  const { nombre, correo, contrasena } = datos;
+  const { nombre, correo, contrasena, codigoAutorizacion } = datos;
+  const codigoEsperado = process.env.CODIGO_REGISTRO_ADMIN;
+
+  if (!codigoEsperado?.trim()) {
+    const error = new Error(
+      'El código de registro administrativo no está configurado en el servidor'
+    );
+    error.statusCode = 500;
+    throw error;
+  }
+
+  if (codigoAutorizacion.trim() !== codigoEsperado) {
+    const error = new Error('Código de autorización inválido');
+    error.statusCode = 403;
+    throw error;
+  }
 
   const administradorExistente = await Administrador.findOne({
     where: { correo }
   });
 
   if (administradorExistente) {
-    const error = new Error('Ya existe un administrador con este correo');
-    error.statusCode = 400;
+    const error = new Error('El correo ya se encuentra registrado');
+    error.statusCode = 409;
     throw error;
   }
 

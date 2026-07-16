@@ -18,7 +18,9 @@ const convertirCampoJson = (valor, valorPorDefecto = []) => {
   try {
     return JSON.parse(valor);
   } catch (error) {
-    throw new Error('Uno de los campos enviados no tiene formato JSON válido');
+    const errorFormato = new Error('Uno de los campos enviados no tiene formato JSON válido');
+    errorFormato.statusCode = 400;
+    throw errorFormato;
   }
 };
 
@@ -76,9 +78,9 @@ const crearTour = async (req, res) => {
     console.error(error);
     console.error(error.stack);
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       ok: false,
-      message: 'Error al crear el tour',
+      message: error.statusCode ? error.message : 'Error al crear el tour',
       error: error.message
     });
   }
@@ -128,6 +130,7 @@ const obtenerTourPorId = async (req, res) => {
   try {
     const { id } = req.params;
     const idioma = req.query.idioma || 'es';
+    const incluirInactivos = req.query.incluir_inactivos === 'true';
 
     if (!id || isNaN(Number(id))) {
       return res.status(400).json({
@@ -136,7 +139,7 @@ const obtenerTourPorId = async (req, res) => {
       });
     }
 
-    const tour = await obtenerTourPorIdService(id, idioma);
+    const tour = await obtenerTourPorIdService(id, idioma, incluirInactivos);
 
     if (!tour) {
       return res.status(404).json({
@@ -236,6 +239,15 @@ const actualizarTour = async (req, res) => {
       datosTour.imagenes_existentes = convertirCampoJson(req.body.imagenes_existentes);
     }
 
+    if (req.body.imagenes_nuevas_metadata !== undefined) {
+      datosTour.imagenes_nuevas_metadata = convertirCampoJson(
+        req.body.imagenes_nuevas_metadata
+      );
+    }
+
+    datosTour.actualizar_imagenes =
+      req.body.actualizar_imagenes === true || req.body.actualizar_imagenes === 'true';
+
     /**
      * req.files contiene únicamente las imágenes nuevas.
      */
@@ -260,9 +272,9 @@ const actualizarTour = async (req, res) => {
   } catch (error) {
     console.error('Error al actualizar tour:', error);
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       ok: false,
-      message: 'Error al actualizar el tour',
+      message: error.statusCode ? error.message : 'Error al actualizar el tour',
       error: error.message
     });
   }
