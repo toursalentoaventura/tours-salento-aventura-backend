@@ -14,7 +14,7 @@ const HorarioTour = sequelize.define('HorarioTour', {
   },
 
   hora_inicio: {
-    type: DataTypes.STRING(20),
+    type: DataTypes.TIME,
     allowNull: false
   },
 

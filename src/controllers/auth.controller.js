@@ -19,6 +19,7 @@ const registrar = async (req, res) => {
         message: 'Completa todos los campos obligatorios'
       });
     }
+    
 
     const administrador = await registrarAdministrador(req.body);
 

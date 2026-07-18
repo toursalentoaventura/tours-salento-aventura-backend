@@ -7,9 +7,7 @@ require('dotenv').config();
  * La referencia debe ser única por transacción.
  */
 const generarReferenciaPago = (idReserva) => {
-  const timestamp = Date.now();
-
-  return `TSA-RES-${idReserva}-${timestamp}`;
+  return `TSA-RES-${idReserva}-${crypto.randomUUID()}`;
 };
 
 /**
@@ -36,10 +34,7 @@ const generarFirmaIntegridad = ({ referencia, montoCentavos, moneda }) => {
 /**
  * Construye la URL de Web Checkout de Wompi.
  *
- * Importante:
- * - No usamos URLSearchParams para evitar problemas con el parámetro
- *   signature:integrity.
- * - Solo enviamos redirect-url si es HTTPS.
+ * URL y URLSearchParams codifican también parámetros con dos puntos.
  */
 const construirUrlCheckoutWompi = ({
   referencia,
@@ -50,46 +45,40 @@ const construirUrlCheckoutWompi = ({
 }) => {
   const checkoutUrl = process.env.WOMPI_CHECKOUT_URL || 'https://checkout.wompi.co/p/';
   const publicKey = process.env.WOMPI_PUBLIC_KEY;
-  const redirectUrl = process.env.FRONTEND_PAYMENT_REDIRECT_URL;
+  const redirectUrl = process.env.WOMPI_REDIRECT_URL ||
+    `${String(process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '')}/pago/confirmacion`;
 
   if (!publicKey) {
     throw new Error('No está configurado WOMPI_PUBLIC_KEY');
   }
 
-  const parametros = [
-    `public-key=${encodeURIComponent(publicKey)}`,
-    `currency=${encodeURIComponent(moneda)}`,
-    `amount-in-cents=${encodeURIComponent(montoCentavos)}`,
-    `reference=${encodeURIComponent(referencia)}`,
-    `signature:integrity=${encodeURIComponent(firmaIntegridad)}`
-  ];
-
-  /**
-   * Wompi debe recibir una URL pública HTTPS.
-   * En local, mejor no enviarla hasta usar ngrok.
-   */
-  if (redirectUrl && redirectUrl.startsWith('https://')) {
-    parametros.push(`redirect-url=${encodeURIComponent(redirectUrl)}`);
-  }
+  const url = new URL(checkoutUrl);
+  const parametros = url.searchParams;
+  parametros.set('public-key', publicKey);
+  parametros.set('currency', moneda);
+  parametros.set('amount-in-cents', String(montoCentavos));
+  parametros.set('reference', referencia);
+  parametros.set('signature:integrity', firmaIntegridad);
+  parametros.set('redirect-url', redirectUrl);
 
   if (reserva?.correo_cliente) {
-    parametros.push(`customer-data:email=${encodeURIComponent(reserva.correo_cliente)}`);
+    parametros.set('customer-data:email', reserva.correo_cliente);
   }
 
   if (reserva?.nombre_cliente) {
-    parametros.push(`customer-data:full-name=${encodeURIComponent(reserva.nombre_cliente)}`);
+    parametros.set('customer-data:full-name', reserva.nombre_cliente);
   }
 
   if (reserva?.telefono_cliente) {
-    parametros.push(`customer-data:phone-number=${encodeURIComponent(reserva.telefono_cliente)}`);
+    parametros.set('customer-data:phone-number', reserva.telefono_cliente);
   }
 
   if (reserva?.documento_cliente) {
-    parametros.push(`customer-data:legal-id=${encodeURIComponent(reserva.documento_cliente)}`);
-    parametros.push('customer-data:legal-id-type=CC');
+    parametros.set('customer-data:legal-id', reserva.documento_cliente);
+    parametros.set('customer-data:legal-id-type', 'CC');
   }
 
-  return `${checkoutUrl}?${parametros.join('&')}`;
+  return url.toString();
 };
 
 /**
@@ -114,18 +103,18 @@ const obtenerValorPorRuta = (objeto, ruta) => {
  *
  * El backend debe recalcular el checksum y compararlo.
  */
-const validarFirmaEventoWompi = (evento) => {
+const validarFirmaEventoWompi = (evento, checksumHeader) => {
   const secretoEventos = process.env.WOMPI_EVENTS_SECRET;
 
   if (!secretoEventos) {
     throw new Error('No está configurado WOMPI_EVENTS_SECRET');
   }
 
-  const properties = evento?.signature?.properties || [];
-  const checksumRecibido = evento?.signature?.checksum;
+  const properties = evento?.signature?.properties;
+  const checksumRecibido = checksumHeader || evento?.signature?.checksum;
   const timestamp = evento?.timestamp;
 
-  if (!checksumRecibido || !timestamp || properties.length === 0) {
+  if (!checksumRecibido || !timestamp || !Array.isArray(properties) || properties.length === 0) {
     return false;
   }
 
@@ -149,13 +138,39 @@ const validarFirmaEventoWompi = (evento) => {
     .update(cadena)
     .digest('hex');
 
-  return checksumCalculado === checksumRecibido;
+  const calculado = Buffer.from(checksumCalculado, 'hex');
+  const recibido = Buffer.from(String(checksumRecibido), 'hex');
+  return calculado.length === recibido.length && crypto.timingSafeEqual(calculado, recibido);
+};
+
+const obtenerTransaccionWompi = async (idTransaccion) => {
+  const id = String(idTransaccion || '').trim();
+  if (!id || id.length > 200 || !/^[\w-]+$/.test(id)) {
+    throw Object.assign(new Error('El identificador de la transacción no es válido.'), { statusCode: 400 });
+  }
+  const base = process.env.WOMPI_API_BASE_URL || 'https://sandbox.wompi.co/v1';
+  const url = new URL(`transactions/${encodeURIComponent(id)}`, `${base.replace(/\/$/, '')}/`);
+  const controlador = new AbortController();
+  const timeout = setTimeout(() => controlador.abort(), 10000);
+  try {
+    const respuesta = await fetch(url, { signal: controlador.signal, headers: { Accept: 'application/json' } });
+    if (!respuesta.ok) throw Object.assign(new Error('No fue posible consultar la transacción en Wompi.'), { statusCode: respuesta.status === 404 ? 404 : 502 });
+    const cuerpo = await respuesta.json();
+    if (!cuerpo?.data?.id) throw Object.assign(new Error('Wompi devolvió una respuesta de transacción inválida.'), { statusCode: 502 });
+    return cuerpo.data;
+  } catch (error) {
+    if (error.name === 'AbortError') throw Object.assign(new Error('La consulta a Wompi excedió el tiempo permitido.'), { statusCode: 504 });
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 module.exports = {
   generarReferenciaPago,
   generarFirmaIntegridad,
   construirUrlCheckoutWompi,
-  validarFirmaEventoWompi
+  validarFirmaEventoWompi,
+  obtenerTransaccionWompi
 };
 

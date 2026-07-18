@@ -5,6 +5,7 @@ const authRoutes = require('./auth.routes');
 const reservaRoutes = require('./reserva.routes');
 const pagoRoutes = require('./pago.routes');
 const contactoRoutes = require('./contacto.routes');
+const { sequelize } = require('../models');
 const router = express.Router();
 
 /**
@@ -14,11 +15,13 @@ const router = express.Router();
  * Endpoint final:
  * GET /api/health
  */
-router.get('/health', (req, res) => {
-  res.json({
-    ok: true,
-    message: 'Servidor activo'
-  });
+router.get('/health', async (req, res) => {
+  try {
+    await sequelize.query('SELECT 1');
+    res.json({ ok: true, status: 'healthy' });
+  } catch {
+    res.status(503).json({ ok: false, status: 'unhealthy' });
+  }
 });
 
 /**

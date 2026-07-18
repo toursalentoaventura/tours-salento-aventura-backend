@@ -15,6 +15,7 @@ const {
   eliminarImagenCloudinary
 } = require('./imagen.service');
 const { traducirTour } = require('./traduccion.service');
+const { normalizarHorariosTour, validarRangosNoDisponibles } = require('../utils/disponibilidadReserva');
 
 
 
@@ -240,6 +241,9 @@ const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
     /**
      * Se crea primero el registro principal del tour.
      */
+    validarRangosNoDisponibles(fechas_no_disponibles);
+    const horariosNormalizados = normalizarHorariosTour(horarios);
+
     const nuevoTour = await Tour.create(
       {
         nombre,
@@ -345,8 +349,8 @@ const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
     /**
      * Se registran los horarios disponibles del tour.
      */
-    if (horarios.length > 0) {
-      const horariosData = horarios.map((horario) => ({
+    if (horariosNormalizados.length > 0) {
+      const horariosData = horariosNormalizados.map((horario) => ({
         id_tour: nuevoTour.id,
         hora_inicio: horario.hora_inicio || horario.hora,
         activo: horario.activo !== undefined ? horario.activo : true
@@ -623,6 +627,7 @@ const actualizarTourCompleto = async (id, datosTour, archivosImagenes = []) => {
      * Si se envían fechas no disponibles, se reemplazan las anteriores.
      */
     if (Array.isArray(fechas_no_disponibles)) {
+      validarRangosNoDisponibles(fechas_no_disponibles);
       await FechaNoDisponibleTour.destroy({
         where: { id_tour: id },
         transaction: transaccion
@@ -678,18 +683,40 @@ const actualizarTourCompleto = async (id, datosTour, archivosImagenes = []) => {
      * Si se envían horarios, se reemplazan los horarios anteriores.
      */
     if (Array.isArray(horarios)) {
-      await HorarioTour.destroy({
-        where: { id_tour: id },
-        transaction: transaccion
-      });
+      const horariosNormalizados = normalizarHorariosTour(horarios);
+      const horariosActuales = await HorarioTour.findAll({ where: { id_tour: id }, transaction: transaccion });
+      const idsActuales = new Set(horariosActuales.map((horario) => Number(horario.id)));
+      const idsConservados = new Set();
 
-      const horariosData = horarios.map((horario) => ({
-        id_tour: id,
-        hora_inicio: horario.hora_inicio || horario.hora,
-        activo: horario.activo !== undefined ? horario.activo : true
-      }));
+      for (const horario of horariosNormalizados) {
+        const idHorario = Number(horario.id);
+        if (Number.isInteger(idHorario) && idHorario > 0) {
+          if (!idsActuales.has(idHorario)) throw Object.assign(new Error('Uno de los horarios no pertenece al tour.'), { statusCode: 422 });
+          idsConservados.add(idHorario);
+          await HorarioTour.update(
+            { hora_inicio: horario.hora_inicio, activo: horario.activo },
+            { where: { id: idHorario, id_tour: id }, transaction: transaccion }
+          );
+        } else {
+          const horarioInactivo = horariosActuales.find((actual) =>
+            actual.hora_inicio === horario.hora_inicio && !actual.activo
+          );
+          if (horarioInactivo) {
+            idsConservados.add(Number(horarioInactivo.id));
+            await horarioInactivo.update({ activo: true }, { transaction: transaccion });
+          } else {
+            await HorarioTour.create(
+              { id_tour: id, hora_inicio: horario.hora_inicio, activo: horario.activo },
+              { transaction: transaccion }
+            );
+          }
+        }
+      }
 
-      await HorarioTour.bulkCreate(horariosData, { transaction: transaccion });
+      const idsRetirados = horariosActuales.map((horario) => Number(horario.id)).filter((idHorario) => !idsConservados.has(idHorario));
+      if (idsRetirados.length > 0) {
+        await HorarioTour.update({ activo: false }, { where: { id: idsRetirados, id_tour: id }, transaction: transaccion });
+      }
     }
     /**
      * Reconcilia los extras por ID: actualiza los existentes, crea los nuevos

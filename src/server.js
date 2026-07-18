@@ -14,6 +14,7 @@ require('dotenv').config();
  * Si no existe, usa el puerto 4000 por defecto.
  */
 const PORT = process.env.PORT || 4000;
+let server;
 
 /**
  * Función principal para iniciar el servidor.
@@ -48,7 +49,7 @@ const startServer = async () => {
     /**
      * Inicia el servidor en el puerto configurado.
      */
-    app.listen(PORT, () => {
+    server = app.listen(PORT, () => {
       console.log(`Servidor ejecutándose en http://localhost:${PORT}`);
     });
   } catch (error) {
@@ -68,3 +69,33 @@ const startServer = async () => {
 
 // Ejecutamos la función que inicia el servidor.
 startServer();
+
+/**
+ * Railway envía SIGTERM antes de reemplazar o detener una instancia. Cerramos
+ * primero el servidor HTTP y después la conexión a la base de datos para no
+ * interrumpir solicitudes que ya estén en curso.
+ */
+const cerrarServidor = (signal) => {
+  console.log(`${signal} recibido. Cerrando el servidor de forma segura...`);
+
+  const finalizar = async () => {
+    try {
+      await sequelize.close();
+      process.exit(0);
+    } catch (error) {
+      console.error('Error durante el cierre del servidor:', error.message);
+      process.exit(1);
+    }
+  };
+
+  if (server) {
+    server.close(finalizar);
+    setTimeout(() => process.exit(1), 10000).unref();
+    return;
+  }
+
+  finalizar();
+};
+
+process.once('SIGTERM', () => cerrarServidor('SIGTERM'));
+process.once('SIGINT', () => cerrarServidor('SIGINT'));

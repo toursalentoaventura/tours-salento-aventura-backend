@@ -9,6 +9,7 @@ const {
   FechaNoDisponibleTour,
   ExtraTour
 } = require('../models');
+const { normalizarFecha, validarDisponibilidadTemporal } = require('../utils/disponibilidadReserva');
 
 /**
  * Servicio para crear una reserva.
@@ -22,7 +23,6 @@ const crearReserva = async (datosReserva) => {
     id_tour,
     id_precio_tour,
     id_horario_tour,
-    hora_inicio,
     nombre_cliente,
     correo_cliente,
     telefono_cliente,
@@ -39,6 +39,10 @@ const crearReserva = async (datosReserva) => {
    * al comparar o calcular el valor total.
    */
   const cantidadPersonasNumero = Number(cantidad_personas);
+
+  if (!normalizarFecha(fecha_reserva)) {
+    throw Object.assign(new Error('La fecha de reserva debe tener formato YYYY-MM-DD.'), { statusCode: 422 });
+  }
 
   if (!cantidadPersonasNumero || cantidadPersonasNumero <= 0) {
     const error = new Error('La cantidad de personas debe ser válida');
@@ -116,8 +120,8 @@ const crearReserva = async (datosReserva) => {
   });
 
   if (fechaBloqueada) {
-    const error = new Error('El tour no está disponible en la fecha seleccionada');
-    error.statusCode = 400;
+    const error = new Error('La fecha seleccionada no está disponible para este tour.');
+    error.statusCode = 422;
     throw error;
   }
 
@@ -143,35 +147,23 @@ const crearReserva = async (datosReserva) => {
    * Si viene id_horario_tour, se valida por ID.
    * Si no viene ID pero sí viene hora_inicio, se busca por la hora.
    */
-  let idHorarioReserva = id_horario_tour || null;
-
-  if (idHorarioReserva) {
-    const horarioTour = await HorarioTour.findOne({
-      where: {
-        id: idHorarioReserva,
-        id_tour,
-        activo: true
-      }
-    });
-
-    if (!horarioTour) {
-      const error = new Error('El horario seleccionado no está disponible para este tour');
-      error.statusCode = 400;
-      throw error;
-    }
-  } else if (hora_inicio) {
-    const horarioTour = await HorarioTour.findOne({
-      where: {
-        id_tour,
-        hora_inicio,
-        activo: true
-      }
-    });
-
-    if (horarioTour) {
-      idHorarioReserva = horarioTour.id;
-    }
+  if (!id_horario_tour) {
+    throw Object.assign(new Error('No se encontró el horario seleccionado.'), { statusCode: 422 });
   }
+  const horarioValidado = await HorarioTour.findByPk(id_horario_tour);
+  if (!horarioValidado) throw Object.assign(new Error('No se encontró el horario seleccionado.'), { statusCode: 422 });
+  if (Number(horarioValidado.id_tour) !== Number(id_tour)) {
+    throw Object.assign(new Error('El horario seleccionado no pertenece al tour.'), { statusCode: 422 });
+  }
+  if (!horarioValidado.activo) {
+    throw Object.assign(new Error('El horario seleccionado ya no está disponible.'), { statusCode: 422 });
+  }
+  const idHorarioReserva = horarioValidado.id;
+  validarDisponibilidadTemporal({
+    fechaReserva: fecha_reserva,
+    horaInicio: horarioValidado.hora_inicio,
+    rangos: fechaBloqueada ? [fechaBloqueada] : []
+  });
 
   /**
    * Calculamos el valor base de la reserva.

@@ -2,7 +2,8 @@ const express = require('express');
 
 const {
   iniciarPago,
-  webhookWompi
+  webhookWompi,
+  confirmarPagoWompi
 } = require('../controllers/pago.controller');
 
 const router = express.Router();
@@ -26,6 +27,8 @@ router.post('/iniciar', iniciarPago);
  * Endpoint final:
  * POST /api/pagos/webhook/wompi
  */
+router.post('/wompi/webhook', webhookWompi);
 router.post('/webhook/wompi', webhookWompi);
+router.get('/wompi/confirmacion/:idTransaccion', confirmarPagoWompi);
 
 module.exports = router;
