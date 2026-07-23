@@ -1,11 +1,17 @@
+// Cargamos las variables de entorno antes de importar la aplicación.
+require('dotenv').config();
+
+const {
+  setupGoogleCredentials
+} = require('./config/setupGoogleCredentials');
+
+setupGoogleCredentials();
+
 // Importamos la aplicación principal de Express configurada en app.js.
 const app = require('./app');
 
 // Importamos la conexión Sequelize desde los modelos.
 const { sequelize } = require('./models');
-
-// Cargamos las variables de entorno del archivo .env.
-require('dotenv').config();
 
 /**
  * Puerto donde se ejecutará el servidor.
