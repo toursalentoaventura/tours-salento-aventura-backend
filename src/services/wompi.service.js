@@ -34,7 +34,7 @@ const generarFirmaIntegridad = ({ referencia, montoCentavos, moneda }) => {
 /**
  * Construye la URL de Web Checkout de Wompi.
  *
- * URL y URLSearchParams codifican también parámetros con dos puntos.
+ * Los nombres de parámetros con dos puntos deben conservarse sin codificar.
  */
 const construirUrlCheckoutWompi = ({
   referencia,
@@ -45,40 +45,66 @@ const construirUrlCheckoutWompi = ({
 }) => {
   const checkoutUrl = process.env.WOMPI_CHECKOUT_URL || 'https://checkout.wompi.co/p/';
   const publicKey = process.env.WOMPI_PUBLIC_KEY;
-  const redirectUrl = process.env.WOMPI_REDIRECT_URL ||
-    `${String(process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '')}/pago/confirmacion`;
+  const redirectUrl = process.env.FRONTEND_PAYMENT_REDIRECT_URL;
 
   if (!publicKey) {
     throw new Error('No está configurado WOMPI_PUBLIC_KEY');
   }
 
-  const url = new URL(checkoutUrl);
-  const parametros = url.searchParams;
-  parametros.set('public-key', publicKey);
-  parametros.set('currency', moneda);
-  parametros.set('amount-in-cents', String(montoCentavos));
-  parametros.set('reference', referencia);
-  parametros.set('signature:integrity', firmaIntegridad);
-  parametros.set('redirect-url', redirectUrl);
+  if (!referencia) {
+    throw new Error('La referencia del pago es obligatoria');
+  }
+
+  if (!montoCentavos) {
+    throw new Error('El monto en centavos es obligatorio');
+  }
+
+  if (!firmaIntegridad) {
+    throw new Error('La firma de integridad es obligatoria');
+  }
+
+  const parametros = [
+    `public-key=${encodeURIComponent(publicKey)}`,
+    `currency=${encodeURIComponent(moneda)}`,
+    `amount-in-cents=${encodeURIComponent(montoCentavos)}`,
+    `reference=${encodeURIComponent(referencia)}`,
+    `signature:integrity=${encodeURIComponent(firmaIntegridad)}`
+  ];
+
+  if (redirectUrl && redirectUrl.startsWith('https://')) {
+    parametros.push(`redirect-url=${encodeURIComponent(redirectUrl)}`);
+  }
 
   if (reserva?.correo_cliente) {
-    parametros.set('customer-data:email', reserva.correo_cliente);
+    parametros.push(`customer-data:email=${encodeURIComponent(reserva.correo_cliente)}`);
   }
 
   if (reserva?.nombre_cliente) {
-    parametros.set('customer-data:full-name', reserva.nombre_cliente);
+    parametros.push(`customer-data:full-name=${encodeURIComponent(reserva.nombre_cliente)}`);
   }
 
   if (reserva?.telefono_cliente) {
-    parametros.set('customer-data:phone-number', reserva.telefono_cliente);
+    parametros.push(`customer-data:phone-number=${encodeURIComponent(reserva.telefono_cliente)}`);
   }
 
   if (reserva?.documento_cliente) {
-    parametros.set('customer-data:legal-id', reserva.documento_cliente);
-    parametros.set('customer-data:legal-id-type', 'CC');
+    parametros.push(`customer-data:legal-id=${encodeURIComponent(reserva.documento_cliente)}`);
+    parametros.push('customer-data:legal-id-type=CC');
   }
 
-  return url.toString();
+  const urlPago = `${checkoutUrl}?${parametros.join('&')}`;
+
+  // console.log('[WOMPI] URL checkout generada:', {
+  //   referencia,
+  //   montoCentavos,
+  //   moneda,
+  //   tieneFirma: Boolean(firmaIntegridad),
+  //   tienePublicKey: Boolean(publicKey),
+  //   incluyeRedirectUrl: Boolean(redirectUrl && redirectUrl.startsWith('https://')),
+  //   urlPago
+  // });
+
+  return urlPago;
 };
 
 /**
