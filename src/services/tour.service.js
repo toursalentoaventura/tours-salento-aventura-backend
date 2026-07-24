@@ -216,6 +216,40 @@ const aplicarTraduccionTour = (tour, idioma = 'es') => {
     traduccion_disponible: true,
   };
 };
+
+/**
+ * Construye las asociaciones de un tour mediante consultas separadas.
+ *
+ * Todos los modelos relacionados son asociaciones hasMany. Cargarlos en una
+ * sola consulta multiplica sus filas entre sí y puede bloquear el proceso al
+ * reconstruir el resultado. `separate: true` conserva la misma estructura de
+ * respuesta sin generar ese producto cartesiano.
+ */
+const construirRelacionesTour = ({
+  incluirTraducciones = true,
+  incluirExtrasInactivos = true
+} = {}) => [
+  { model: PrecioTour, as: 'precios', separate: true },
+  { model: ImagenTour, as: 'imagenes', separate: true },
+  {
+    model: FechaNoDisponibleTour,
+    as: 'fechas_no_disponibles',
+    separate: true
+  },
+  { model: DetalleTour, as: 'detalles', separate: true },
+  { model: ItinerarioTour, as: 'itinerario', separate: true },
+  { model: HorarioTour, as: 'horarios', separate: true },
+  {
+    model: ExtraTour,
+    as: 'extras',
+    separate: true,
+    ...(incluirExtrasInactivos ? {} : { where: { activo: true } })
+  },
+  ...(incluirTraducciones
+    ? [{ model: TraduccionTour, as: 'traducciones', separate: true }]
+    : [])
+];
+
 const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
   const transaccion = await sequelize.transaction();
 
@@ -387,16 +421,7 @@ const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
      * Se consulta nuevamente el tour con toda su información relacionada.
      */
     const tourCreado = await Tour.findByPk(nuevoTour.id, {
-      include: [
-        { model: PrecioTour, as: 'precios' },
-        { model: ImagenTour, as: 'imagenes' },
-        { model: FechaNoDisponibleTour, as: 'fechas_no_disponibles' },
-        { model: DetalleTour, as: 'detalles' },
-        { model: ItinerarioTour, as: 'itinerario' },
-        { model: HorarioTour, as: 'horarios' },
-        { model: ExtraTour, as: 'extras' },
-        { model: TraduccionTour, as: 'traducciones' }
-      ]
+      include: construirRelacionesTour()
     });
 
     await generarTraduccionesTour(tourCreado);
@@ -406,11 +431,17 @@ const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
     return tourConTraducciones;
   } catch (error) {
     /**
-     * Si ocurre un error, se revierten todos los cambios.
+     * Solo se revierte una transacción que todavía sigue abierta. Así se
+     * conserva la excepción original cuando una operación posterior al commit,
+     * como la generación de traducciones, falla.
      */
     console.error(error);
     console.error(error.stack);
-    await transaccion.rollback();
+
+    if (!transaccion.finished) {
+      await transaccion.rollback();
+    }
+
     throw error;
   }
 };
@@ -428,16 +459,9 @@ const listarTours = async (idioma = 'es', incluirInactivos = false) => {
     where: incluirInactivos
       ? {}
       : { estado_publicacion: 'activo' },
-    include: [
-      { model: PrecioTour, as: 'precios' },
-      { model: ImagenTour, as: 'imagenes' },
-      { model: FechaNoDisponibleTour, as: 'fechas_no_disponibles' },
-      { model: DetalleTour, as: 'detalles' },
-      { model: ItinerarioTour, as: 'itinerario' },
-      { model: HorarioTour, as: 'horarios' },
-      { model: ExtraTour, as: 'extras', where: { activo: true }, required: false },
-      { model: TraduccionTour, as: 'traducciones' },
-    ],
+    include: construirRelacionesTour({
+      incluirExtrasInactivos: false
+    }),
     order: [['id', 'DESC']],
   });
 
@@ -457,20 +481,9 @@ const obtenerTourPorId = async (id, idioma = 'es', incluirInactivos = false) => 
       id,
       ...(incluirInactivos ? {} : { estado_publicacion: 'activo' })
     },
-    include: [
-      { model: PrecioTour, as: 'precios' },
-      { model: ImagenTour, as: 'imagenes' },
-      { model: FechaNoDisponibleTour, as: 'fechas_no_disponibles' },
-      { model: DetalleTour, as: 'detalles' },
-      { model: ItinerarioTour, as: 'itinerario' },
-      { model: HorarioTour, as: 'horarios' },
-      {
-        model: ExtraTour,
-        as: 'extras',
-        ...(incluirInactivos ? {} : { where: { activo: true }, required: false })
-      },
-      { model: TraduccionTour, as: 'traducciones' },
-    ],
+    include: construirRelacionesTour({
+      incluirExtrasInactivos: incluirInactivos
+    }),
   });
 
   return aplicarTraduccionTour(tour, idioma);
@@ -811,16 +824,10 @@ const actualizarTourCompleto = async (id, datosTour, archivosImagenes = []) => {
     await transaccion.commit();
 
     const tourActualizado = await Tour.findByPk(id, {
-  include: [
-    { model: PrecioTour, as: 'precios' },
-    { model: ImagenTour, as: 'imagenes' },
-    { model: FechaNoDisponibleTour, as: 'fechas_no_disponibles' },
-    { model: DetalleTour, as: 'detalles' },
-    { model: ItinerarioTour, as: 'itinerario' },
-    { model: HorarioTour, as: 'horarios' },
-    { model: ExtraTour, as: 'extras' }
-  ]
-});
+      include: construirRelacionesTour({
+        incluirTraducciones: false
+      })
+    });
     await generarTraduccionesTour(tourActualizado);
 
     const tourConTraducciones = await obtenerTourPorId(id, 'es', true);

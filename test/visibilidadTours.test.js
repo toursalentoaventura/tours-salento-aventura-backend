@@ -23,6 +23,10 @@ test('el listado público consulta únicamente tours activos', async () => {
     assert.deepEqual(opcionesConsulta.where, {
       estado_publicacion: 'activo'
     });
+    assert.ok(
+      opcionesConsulta.include.every((relacion) => relacion.separate === true),
+      'Las asociaciones del listado deben cargarse sin productos cartesianos'
+    );
   } finally {
     Tour.findAll = findAllOriginal;
   }
@@ -62,6 +66,10 @@ test('el detalle público exige que el tour esté activo', async () => {
       id: 42,
       estado_publicacion: 'activo'
     });
+    assert.ok(
+      opcionesConsulta.include.every((relacion) => relacion.separate === true),
+      'Las asociaciones del detalle deben cargarse sin productos cartesianos'
+    );
   } finally {
     Tour.findOne = findOneOriginal;
   }
