@@ -27,21 +27,37 @@ app.use(compression());
 /**
  * Configuración de CORS.
  *
- * Permite que el frontend definido en FRONTEND_URL pueda hacer
- * peticiones al backend.
+ * FRONTEND_URL puede agregar uno o varios orígenes separados por comas.
+ * Las peticiones sin Origin se permiten para clientes no ejecutados en un
+ * navegador, como Postman, Thunder Client o procesos internos.
  */
-const origenesPermitidos = String(process.env.FRONTEND_URL || '')
-  .split(',')
-  .map((origen) => origen.trim())
-  .filter(Boolean);
+const origenesPermitidos = new Set([
+  'http://localhost:5173',
+  'https://tourssalentoaventura.com',
+  'https://www.tourssalentoaventura.com',
+  ...String(process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((origen) => origen.trim())
+    .filter(Boolean)
+]);
 
-app.use(cors({
+const opcionesCors = {
   origin: (origen, callback) => {
-    if (!origen || origenesPermitidos.includes(origen)) return callback(null, true);
-    return callback(new Error('Origen no permitido por CORS'));
+    if (!origen || origenesPermitidos.has(origen)) {
+      return callback(null, true);
+    }
+
+    const error = new Error('Origen no permitido por CORS');
+    error.statusCode = 403;
+    return callback(error);
   },
-  credentials: true
-}));
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(opcionesCors));
 
 /**
  * Permite que el servidor reciba datos en formato JSON.
