@@ -96,7 +96,6 @@ const traducirTour = async (tour, idiomaDestino = 'en') => {
     idioma: idiomaDestino,
 
     nombre: await traducirTexto(tourPlano.nombre, idiomaDestino),
-    categoria: await traducirTexto(tourPlano.categoria, idiomaDestino),
     dificultad: await traducirTexto(tourPlano.dificultad, idiomaDestino),
     duracion: await traducirTexto(tourPlano.duracion, idiomaDestino),
     ubicacion_destino: await traducirTexto(tourPlano.ubicacion_destino, idiomaDestino),

@@ -16,6 +16,7 @@ const {
 } = require('./imagen.service');
 const { traducirTour } = require('./traduccion.service');
 const { normalizarHorariosTour, validarRangosNoDisponibles } = require('../utils/disponibilidadReserva');
+const { validarCategoriaTour } = require('../constants/categoriasTour');
 
 
 
@@ -208,6 +209,9 @@ const aplicarTraduccionTour = (tour, idioma = 'es') => {
   return {
     ...tourPlano,
     ...contenidoTraducido,
+    // La categoría es un valor estable del dominio y nunca se sustituye por
+    // una traducción almacenada anteriormente.
+    categoria: tourPlano.categoria,
     idioma_actual: idiomaNormalizado,
     traduccion_disponible: true,
   };
@@ -243,11 +247,12 @@ const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
      */
     validarRangosNoDisponibles(fechas_no_disponibles);
     const horariosNormalizados = normalizarHorariosTour(horarios);
+    const categoriaValidada = validarCategoriaTour(categoria);
 
     const nuevoTour = await Tour.create(
       {
         nombre,
-        categoria,
+        categoria: categoriaValidada,
         dificultad,
         tipo_tour,
         idiomas: idiomas || ['Español'],
@@ -396,7 +401,7 @@ const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
 
     await generarTraduccionesTour(tourCreado);
 
-    const tourConTraducciones = await obtenerTourPorId(nuevoTour.id);
+    const tourConTraducciones = await obtenerTourPorId(nuevoTour.id, 'es', true);
 
     return tourConTraducciones;
   } catch (error) {
@@ -415,9 +420,14 @@ const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
  * Servicio para listar todos los tours.
  *
  * Retorna los tours utilizando el idioma solicitado.
+ * Las consultas públicas incluyen únicamente tours activos; la administración
+ * puede solicitar ambos estados mediante una ruta autenticada.
  */
-const listarTours = async (idioma = 'es') => {
+const listarTours = async (idioma = 'es', incluirInactivos = false) => {
   const tours = await Tour.findAll({
+    where: incluirInactivos
+      ? {}
+      : { estado_publicacion: 'activo' },
     include: [
       { model: PrecioTour, as: 'precios' },
       { model: ImagenTour, as: 'imagenes' },
@@ -438,9 +448,15 @@ const listarTours = async (idioma = 'es') => {
  * Servicio para obtener un tour por su ID.
  *
  * Devuelve el tour en el idioma solicitado.
+ * Por defecto exige que esté activo para impedir acceso público directo a
+ * contenido despublicado.
  */
 const obtenerTourPorId = async (id, idioma = 'es', incluirInactivos = false) => {
-  const tour = await Tour.findByPk(id, {
+  const tour = await Tour.findOne({
+    where: {
+      id,
+      ...(incluirInactivos ? {} : { estado_publicacion: 'activo' })
+    },
     include: [
       { model: PrecioTour, as: 'precios' },
       { model: ImagenTour, as: 'imagenes' },
@@ -520,7 +536,10 @@ const actualizarTourCompleto = async (id, datosTour, archivosImagenes = []) => {
 
     camposPermitidos.forEach((campo) => {
       if (datosTour[campo] !== undefined) {
-        datosActualizados[campo] = datosTour[campo];
+        datosActualizados[campo] =
+          campo === 'categoria'
+            ? validarCategoriaTour(datosTour[campo])
+            : datosTour[campo];
       }
     });
 
@@ -804,7 +823,7 @@ const actualizarTourCompleto = async (id, datosTour, archivosImagenes = []) => {
 });
     await generarTraduccionesTour(tourActualizado);
 
-    const tourConTraducciones = await obtenerTourPorId(id);
+    const tourConTraducciones = await obtenerTourPorId(id, 'es', true);
 
     return tourConTraducciones;
   } catch (error) {

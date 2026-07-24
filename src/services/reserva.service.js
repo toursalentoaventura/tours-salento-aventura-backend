@@ -65,7 +65,7 @@ const crearReserva = async (datosReserva) => {
    * Validamos que el tour esté activo.
    */
   if (tour.estado_publicacion !== 'activo') {
-    const error = new Error('El tour seleccionado no está disponible');
+    const error = new Error('El tour seleccionado no está disponible para reservas');
     error.statusCode = 400;
     throw error;
   }
@@ -186,6 +186,26 @@ const crearReserva = async (datosReserva) => {
    * ]
    */
   const idReservaCreada = await sequelize.transaction(async (transaccion) => {
+    /**
+     * Revalida y bloquea brevemente el tour dentro de la transacción. Así no
+     * puede desactivarse entre la validación inicial y la creación efectiva de
+     * la reserva.
+     */
+    const tourDisponible = await Tour.findOne({
+      where: {
+        id: id_tour,
+        estado_publicacion: 'activo'
+      },
+      transaction: transaccion,
+      lock: transaccion.LOCK.UPDATE
+    });
+
+    if (!tourDisponible) {
+      const error = new Error('El tour seleccionado no está disponible para reservas');
+      error.statusCode = 400;
+      throw error;
+    }
+
     const extrasSeleccionados = [];
 
     if (Array.isArray(extras) && extras.length > 0) {

@@ -12,6 +12,19 @@ const {
 const router = express.Router();
 
 /**
+ * Exige autenticación administrativa únicamente cuando una consulta solicita
+ * incluir tours o relaciones inactivas. Las consultas públicas continúan sin
+ * token y reciben exclusivamente contenido publicado.
+ */
+const protegerConsultaConInactivos = (req, res, next) => {
+  if (req.query.incluir_inactivos === 'true') {
+    return protegerRuta(req, res, next);
+  }
+
+  return next();
+};
+
+/**
  * Crear un nuevo tour.
  *
  * Recibe los datos principales del tour y su información relacionada:
@@ -36,7 +49,7 @@ router.post(
  * Endpoint final:
  * GET /api/tours
  */
-router.get('/', listarTours);
+router.get('/', protegerConsultaConInactivos, listarTours);
 
 /**
  * Obtener un tour por ID.
@@ -46,7 +59,7 @@ router.get('/', listarTours);
  * Endpoint final:
  * GET /api/tours/:id
  */
-router.get('/:id', obtenerTourPorId);
+router.get('/:id', protegerConsultaConInactivos, obtenerTourPorId);
 /**
  * Actualizar un tour por ID.
  *

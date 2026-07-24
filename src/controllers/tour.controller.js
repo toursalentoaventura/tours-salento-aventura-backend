@@ -98,8 +98,9 @@ const crearTour = async (req, res) => {
 const listarTours = async (req, res) => {
   try {
     const idioma = req.query.idioma || 'es';
+    const incluirInactivos = req.query.incluir_inactivos === 'true';
 
-    const tours = await listarToursService(idioma);
+    const tours = await listarToursService(idioma, incluirInactivos);
 
     return res.status(200).json({
       ok: true,
