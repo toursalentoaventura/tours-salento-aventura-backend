@@ -8,25 +8,19 @@ const { generarPlantillaConfirmacionReserva } = require('../templates/emails/res
 
 require('dotenv').config();
 
-/**
- * Cliente principal de MailerSend.
- *
- * Usa el API key configurado en el archivo .env.
- */
-const mailerSend = new MailerSend({
-  apiKey: process.env.MAILERSEND_API_KEY
-});
+const obtenerMensajeErrorMailerSend = (error) => {
+  const cuerpo = error?.body || error?.response?.body || error?.response?.data;
+  const erroresValidacion = cuerpo?.errors && typeof cuerpo.errors === 'object'
+    ? Object.values(cuerpo.errors).flat().filter(Boolean).join(' ')
+    : '';
 
-/**
- * Remitente oficial del sistema.
- *
- * Este correo debe pertenecer a un dominio verificado
- * dentro de MailerSend.
- */
-const remitente = new Sender(
-  process.env.MAILERSEND_FROM_EMAIL,
-  process.env.MAILERSEND_FROM_NAME || 'Tour Salento Aventura'
-);
+  return [
+    cuerpo?.message,
+    erroresValidacion,
+    error?.message
+  ].find((mensaje) => typeof mensaje === 'string' && mensaje.trim()) ||
+    `MailerSend respondió con estado ${error?.statusCode || error?.response?.status || 'desconocido'}`;
+};
 
 /**
  * Servicio genérico para enviar correos.
@@ -40,14 +34,22 @@ const enviarCorreo = async ({
   html,
   texto
 }) => {
-  if (!process.env.MAILERSEND_API_KEY) {
+  const apiKey = String(process.env.MAILERSEND_API_KEY || '').trim();
+  const correoRemitente = String(process.env.MAILERSEND_FROM_EMAIL || '').trim();
+  const nombreRemitente = String(
+    process.env.MAILERSEND_FROM_NAME || 'Tours Salento Aventura'
+  ).trim();
+
+  if (!apiKey) {
     throw new Error('No está configurado MAILERSEND_API_KEY');
   }
 
-  if (!process.env.MAILERSEND_FROM_EMAIL) {
+  if (!correoRemitente) {
     throw new Error('No está configurado MAILERSEND_FROM_EMAIL');
   }
 
+  const mailerSend = new MailerSend({ apiKey });
+  const remitente = new Sender(correoRemitente, nombreRemitente);
   const destinatarios = [
     new Recipient(para, nombrePara || para)
   ];
@@ -59,9 +61,14 @@ const enviarCorreo = async ({
     .setHtml(html)
     .setText(texto || asunto);
 
-  const respuesta = await mailerSend.email.send(emailParams);
-
-  return respuesta;
+  try {
+    return await mailerSend.email.send(emailParams);
+  } catch (error) {
+    const mensaje = obtenerMensajeErrorMailerSend(error);
+    const errorCorreo = new Error(mensaje);
+    errorCorreo.statusCode = error?.statusCode || error?.response?.status;
+    throw errorCorreo;
+  }
 };
 
 /**
@@ -197,5 +204,6 @@ module.exports = {
   enviarCorreoReservaCliente,
   enviarCorreoNuevaReservaAdmin,
   enviarCorreoPagoAprobadoCliente,
-  enviarCorreoPagoRechazadoCliente
+  enviarCorreoPagoRechazadoCliente,
+  obtenerMensajeErrorMailerSend
 };
