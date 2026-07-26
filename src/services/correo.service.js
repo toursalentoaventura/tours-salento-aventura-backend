@@ -30,6 +30,7 @@ const obtenerMensajeErrorMailerSend = (error) => {
 const enviarCorreo = async ({
   para,
   nombrePara,
+  copiaOculta = [],
   asunto,
   html,
   texto
@@ -53,6 +54,20 @@ const enviarCorreo = async ({
   const destinatarios = [
     new Recipient(para, nombrePara || para)
   ];
+  const destinatariosCopiaOculta = (Array.isArray(copiaOculta)
+    ? copiaOculta
+    : [copiaOculta])
+    .filter(Boolean)
+    .map((destinatario) => {
+      if (typeof destinatario === 'string') {
+        return new Recipient(destinatario, 'Tours Salento Aventura');
+      }
+
+      return new Recipient(
+        destinatario.correo,
+        destinatario.nombre || destinatario.correo
+      );
+    });
 
   const emailParams = new EmailParams()
     .setFrom(remitente)
@@ -60,6 +75,10 @@ const enviarCorreo = async ({
     .setSubject(asunto)
     .setHtml(html)
     .setText(texto || asunto);
+
+  if (destinatariosCopiaOculta.length > 0) {
+    emailParams.setBcc(destinatariosCopiaOculta);
+  }
 
   try {
     return await mailerSend.email.send(emailParams);
@@ -172,6 +191,14 @@ const enviarCorreoPagoAprobadoCliente = async (reserva) => {
   return enviarCorreo({
     para: reservaPlana.correo_cliente,
     nombrePara: reservaPlana.nombre_cliente,
+    copiaOculta: [
+      {
+        correo:
+          process.env.MAILERSEND_ADMIN_EMAIL ||
+          'tourssalentoaventura@gmail.com',
+        nombre: 'Tours Salento Aventura'
+      }
+    ],
     asunto: `Reserva confirmada${reservaPlana.tour?.nombre ? ` - ${reservaPlana.tour.nombre}` : ''}`,
     html,
     texto: `Hola ${reservaPlana.nombre_cliente}, tu pago fue aprobado y tu reserva está confirmada.`

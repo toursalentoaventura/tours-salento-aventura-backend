@@ -8,7 +8,7 @@ process.env.WOMPI_EVENTS_SECRET = 'events_test';
 process.env.FRONTEND_PAYMENT_REDIRECT_URL = '';
 
 const { generarReferenciaPago, construirUrlCheckoutWompi, validarFirmaEventoWompi } = require('../src/services/wompi.service');
-const { MAPA_ESTADOS_WOMPI } = require('../src/services/pago.service');
+const { MAPA_ESTADOS_WOMPI, validarAmbiente } = require('../src/services/pago.service');
 
 test('genera referencias únicas por intento', () => {
   const primera = generarReferenciaPago(25);
@@ -45,4 +45,12 @@ test('mapea una aprobación a pago y reserva confirmados', () => {
     estadoReservaPago: 'pagado',
     estadoReserva: 'confirmada'
   });
+});
+
+test('acepta nombres equivalentes para los ambientes de Wompi', () => {
+  process.env.WOMPI_ENVIRONMENT = 'production';
+  assert.doesNotThrow(() => validarAmbiente('prod'));
+
+  process.env.WOMPI_ENVIRONMENT = 'sandbox';
+  assert.doesNotThrow(() => validarAmbiente('test'));
 });

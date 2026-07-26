@@ -22,11 +22,24 @@ const MAPA_ESTADOS_WOMPI = {
 
 const validarAmbiente = (ambiente) => {
   if (!ambiente) return;
-  const configurado = String(process.env.WOMPI_ENVIRONMENT || 'sandbox').toLowerCase();
-  const recibido = String(ambiente).toLowerCase();
-  const equivalentesSandbox = new Set(['sandbox', 'test']);
-  const coincide = configurado === recibido ||
-    (equivalentesSandbox.has(configurado) && equivalentesSandbox.has(recibido));
+  const normalizarAmbiente = (valor) => {
+    const ambienteNormalizado = String(valor || '').trim().toLowerCase();
+
+    if (['sandbox', 'test', 'pruebas'].includes(ambienteNormalizado)) {
+      return 'test';
+    }
+
+    if (['prod', 'production', 'produccion', 'producción'].includes(ambienteNormalizado)) {
+      return 'prod';
+    }
+
+    return ambienteNormalizado;
+  };
+  const configurado = normalizarAmbiente(
+    process.env.WOMPI_ENVIRONMENT || 'sandbox'
+  );
+  const recibido = normalizarAmbiente(ambiente);
+  const coincide = configurado === recibido;
   if (!coincide) throw Object.assign(new Error('El ambiente de la transacción no coincide con la configuración.'), { statusCode: 422 });
 };
 
@@ -159,4 +172,11 @@ const confirmarTransaccionWompi = async (idTransaccion) => {
   };
 };
 
-module.exports = { MAPA_ESTADOS_WOMPI, iniciarPagoReserva, conciliarTransaccionWompi, procesarWebhookWompi, confirmarTransaccionWompi };
+module.exports = {
+  MAPA_ESTADOS_WOMPI,
+  validarAmbiente,
+  iniciarPagoReserva,
+  conciliarTransaccionWompi,
+  procesarWebhookWompi,
+  confirmarTransaccionWompi
+};
