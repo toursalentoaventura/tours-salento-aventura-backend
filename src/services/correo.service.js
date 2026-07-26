@@ -4,6 +4,7 @@ const {
   Sender,
   Recipient
 } = require('mailersend');
+const { generarPlantillaConfirmacionReserva } = require('../templates/emails/reservaConfirmacion.template');
 
 require('dotenv').config();
 
@@ -119,21 +120,54 @@ const enviarCorreoNuevaReservaAdmin = async (reserva) => {
  * Correo para el cliente cuando el pago es aprobado.
  */
 const enviarCorreoPagoAprobadoCliente = async (reserva) => {
-  const html = `
-    <h2>Pago aprobado</h2>
-    <p>Hola ${reserva.nombre_cliente},</p>
-    <p>Tu pago fue aprobado y tu reserva ha sido confirmada.</p>
-    <p><strong>Fecha del tour:</strong> ${reserva.fecha_reserva}</p>
-    <p><strong>Valor pagado:</strong> $${Number(reserva.valor_total).toLocaleString('es-CO')} COP</p>
-    <p>Gracias por elegir <strong>Tour Salento Aventura</strong>.</p>
-  `;
+  const reservaPlana = typeof reserva?.get === 'function'
+    ? reserva.get({ plain: true })
+    : reserva;
+  const extras = Array.isArray(reservaPlana.extras_seleccionados)
+    ? reservaPlana.extras_seleccionados
+    : [];
+  const subtotalExtras = extras.reduce(
+    (total, extra) => total + Number(extra.subtotal || 0),
+    0
+  );
+  const total = Number(reservaPlana.valor_total || 0);
+  const html = generarPlantillaConfirmacionReserva({
+    nombreCliente: reservaPlana.nombre_cliente,
+    nombreTour: reservaPlana.tour?.nombre,
+    fechaReserva: reservaPlana.fecha_reserva,
+    horario: reservaPlana.horario_tour?.hora_inicio,
+    cantidadPersonas: reservaPlana.cantidad_personas,
+    puntoEncuentro: reservaPlana.tour?.punto_encuentro,
+    idioma: reservaPlana.idioma,
+    extras: extras.map((extra) => ({
+      nombre: extra.nombre,
+      cantidad: extra.cantidad,
+      precio: extra.subtotal
+    })),
+    subtotalTour: Math.max(0, total - subtotalExtras),
+    subtotalExtras,
+    total,
+    moneda: 'COP',
+    estadoReserva: 'Confirmada',
+    estadoPago: 'Pagado',
+    referencia: reservaPlana.referencia_pago,
+    observaciones: reservaPlana.observaciones,
+    correoCliente: reservaPlana.correo_cliente,
+    telefonoCliente: reservaPlana.telefono_cliente,
+    logoUrl: process.env.MAILERSEND_LOGO_URL,
+    contacto: {
+      whatsapp: process.env.CONTACT_WHATSAPP || '+57 313 797 8499',
+      correo: process.env.MAILERSEND_FROM_EMAIL,
+      sitioWeb: process.env.PUBLIC_SITE_URL || 'https://tourssalentoaventura.com'
+    }
+  });
 
   return enviarCorreo({
-    para: reserva.correo_cliente,
-    nombrePara: reserva.nombre_cliente,
-    asunto: 'Pago aprobado - Reserva confirmada',
+    para: reservaPlana.correo_cliente,
+    nombrePara: reservaPlana.nombre_cliente,
+    asunto: `Reserva confirmada${reservaPlana.tour?.nombre ? ` - ${reservaPlana.tour.nombre}` : ''}`,
     html,
-    texto: `Hola ${reserva.nombre_cliente}, tu pago fue aprobado y tu reserva está confirmada.`
+    texto: `Hola ${reservaPlana.nombre_cliente}, tu pago fue aprobado y tu reserva está confirmada.`
   });
 };
 

@@ -12,6 +12,7 @@ const Reserva = require('./Reserva');
 const ExtraTour = require('./ExtraTour');
 const TraduccionTour = require('./TraduccionTour');
 const Pago = require('./Pago');
+const NotificacionCorreo = require('./NotificacionCorreo');
 Tour.hasMany(PrecioTour, {
   foreignKey: 'id_tour',
   as: 'precios',
@@ -163,6 +164,17 @@ Pago.belongsTo(Reserva, {
   foreignKey: 'id_reserva',
   as: 'reserva'
 });
+
+Reserva.hasMany(NotificacionCorreo, {
+  foreignKey: 'id_reserva',
+  as: 'notificaciones_correo',
+  onDelete: 'CASCADE'
+});
+
+NotificacionCorreo.belongsTo(Reserva, {
+  foreignKey: 'id_reserva',
+  as: 'reserva'
+});
 module.exports = {
   sequelize,
   Tour,
@@ -176,5 +188,6 @@ module.exports = {
   Reserva,
   ExtraTour,
   TraduccionTour,
-  Pago
+  Pago,
+  NotificacionCorreo
 };

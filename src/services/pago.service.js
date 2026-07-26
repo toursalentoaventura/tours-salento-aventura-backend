@@ -1,6 +1,9 @@
 const { sequelize, Reserva, Pago, Tour, HorarioTour, FechaNoDisponibleTour } = require('../models');
 const { validarDisponibilidadTemporal } = require('../utils/disponibilidadReserva');
-const { enviarCorreoPagoAprobadoCliente } = require('./correo.service');
+const {
+  registrarConfirmacionReserva,
+  enviarConfirmacionReservaPendiente
+} = require('./notificacionCorreo.service');
 const {
   generarReferenciaPago,
   generarFirmaIntegridad,
@@ -67,7 +70,11 @@ const iniciarPagoReserva = async (idReserva) => sequelize.transaction(async (tra
   return { id_reserva: reserva.id, referencia_pago: pago.referencia_pago, estado_pago: pago.estado_pago, url_pago: urlPago };
 });
 
-const conciliarTransaccionWompi = async (transaccionWompi, respuestaPasarela = transaccionWompi) => {
+const conciliarTransaccionWompi = async (
+  transaccionWompi,
+  respuestaPasarela = transaccionWompi,
+  { propagarErrorCorreo = false } = {}
+) => {
   const { id, reference, status, amount_in_cents: montoCentavos, currency } = transaccionWompi || {};
   const mapeo = MAPA_ESTADOS_WOMPI[String(status || '').toUpperCase()];
   if (!id || !reference || !mapeo || !Number.isInteger(Number(montoCentavos)) || !currency) {
@@ -75,7 +82,7 @@ const conciliarTransaccionWompi = async (transaccionWompi, respuestaPasarela = t
   }
   validarAmbiente(transaccionWompi.environment);
 
-  let primeraAprobacion = false;
+  let idNotificacionConfirmacion = null;
   const resultado = await sequelize.transaction(async (transaction) => {
     const pago = await Pago.findOne({ where: { referencia_pago: reference }, transaction, lock: transaction.LOCK.UPDATE });
     if (!pago) throw Object.assign(new Error('No existe un pago local para la referencia recibida.'), { statusCode: 404 });
@@ -85,7 +92,6 @@ const conciliarTransaccionWompi = async (transaccionWompi, respuestaPasarela = t
     const reserva = await Reserva.findByPk(pago.id_reserva, { transaction, lock: transaction.LOCK.UPDATE });
     if (!reserva) throw Object.assign(new Error('La reserva asociada al pago no existe.'), { statusCode: 404 });
 
-    primeraAprobacion = mapeo.estadoPago === 'aprobado' && reserva.estado_pago !== 'pagado';
     const estadoPagoFinal = pago.estado_pago === 'aprobado' && mapeo.estadoPago !== 'aprobado'
       ? 'aprobado'
       : ['rechazado', 'cancelado'].includes(pago.estado_pago) && mapeo.estadoPago === 'pendiente'
@@ -95,13 +101,27 @@ const conciliarTransaccionWompi = async (transaccionWompi, respuestaPasarela = t
     if (reserva.estado_pago !== 'pagado' || mapeo.estadoPago === 'aprobado') {
       await reserva.update({ estado_pago: mapeo.estadoReservaPago, estado_reserva: mapeo.estadoReserva }, { transaction });
     }
+    if (mapeo.estadoPago === 'aprobado') {
+      idNotificacionConfirmacion = await registrarConfirmacionReserva(
+        reserva.id,
+        transaction
+      );
+    }
     return { pago, reserva, estado_wompi: String(status).toUpperCase(), procesado: true };
   });
 
-  if (primeraAprobacion) {
-    enviarCorreoPagoAprobadoCliente(resultado.reserva).catch((error) => {
+  if (idNotificacionConfirmacion) {
+    try {
+      await enviarConfirmacionReservaPendiente(idNotificacionConfirmacion);
+    } catch (error) {
       console.error('No se pudo enviar el correo de pago aprobado:', error.message);
-    });
+      if (propagarErrorCorreo) {
+        throw Object.assign(
+          new Error('El pago fue confirmado, pero el correo está pendiente de reintento'),
+          { statusCode: 502 }
+        );
+      }
+    }
   }
   return resultado;
 };
@@ -113,7 +133,11 @@ const procesarWebhookWompi = async ({ evento, checksumHeader }) => {
   validarAmbiente(evento.environment);
   if (evento.event !== 'transaction.updated') return { procesado: false };
   if (!evento.data?.transaction) throw Object.assign(new Error('El evento no contiene una transacción.'), { statusCode: 400 });
-  return conciliarTransaccionWompi(evento.data.transaction, evento);
+  return conciliarTransaccionWompi(
+    evento.data.transaction,
+    evento,
+    { propagarErrorCorreo: true }
+  );
 };
 
 const confirmarTransaccionWompi = async (idTransaccion) => {

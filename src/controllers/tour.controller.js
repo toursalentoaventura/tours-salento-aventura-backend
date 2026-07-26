@@ -24,6 +24,26 @@ const convertirCampoJson = (valor, valorPorDefecto = []) => {
   }
 };
 
+const normalizarIdiomas = (valor) => {
+  const idiomas = convertirCampoJson(valor, [])
+    .map((idioma) => String(idioma).trim().replace(/\s+/g, ' '))
+    .filter(Boolean)
+    .filter(
+      (idioma, index, lista) =>
+        lista.findIndex(
+          (otroIdioma) => otroIdioma.toLocaleLowerCase('es') === idioma.toLocaleLowerCase('es')
+        ) === index
+    );
+
+  if (idiomas.length === 0) {
+    const error = new Error('Debe agregar al menos un idioma disponible para el tour');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return idiomas;
+};
+
 /**
  * Controlador para crear un tour.
  *
@@ -54,7 +74,7 @@ const crearTour = async (req, res) => {
         ...req.body,
         maximo_personas: Number(req.body.maximo_personas),
 
-        idiomas: convertirCampoJson(req.body.idiomas, ['Español']),
+        idiomas: normalizarIdiomas(req.body.idiomas),
         precios: convertirCampoJson(req.body.precios),
         fechas_no_disponibles: convertirCampoJson(req.body.fechas_no_disponibles),
         detalles: convertirCampoJson(req.body.detalles),
@@ -204,7 +224,7 @@ const actualizarTour = async (req, res) => {
     }
 
     if (req.body.idiomas !== undefined) {
-      datosTour.idiomas = convertirCampoJson(req.body.idiomas, ['Español']);
+      datosTour.idiomas = normalizarIdiomas(req.body.idiomas);
     }
 
     if (req.body.precios !== undefined) {

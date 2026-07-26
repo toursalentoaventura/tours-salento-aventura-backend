@@ -20,7 +20,8 @@ const crearReserva = async (req, res) => {
       correo_cliente,
       telefono_cliente,
       fecha_reserva,
-      cantidad_personas
+      cantidad_personas,
+      idioma
     } = req.body;
 
     /**
@@ -33,7 +34,8 @@ const crearReserva = async (req, res) => {
       !correo_cliente ||
       !telefono_cliente ||
       !fecha_reserva ||
-      !cantidad_personas
+      !cantidad_personas ||
+      !idioma
     ) {
       return res.status(400).json({
         ok: false,

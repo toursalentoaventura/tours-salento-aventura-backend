@@ -98,7 +98,17 @@ const crearReserva = async (datosReserva) => {
     }
   }
 
-  if (idioma && idiomasTour.length > 0 && !idiomasTour.includes(idioma)) {
+  if (idiomasTour.length === 0) {
+    idiomasTour = ['Español'];
+  }
+
+  const idiomaSeleccionado = idiomasTour.find(
+    (idiomaDisponible) =>
+      String(idiomaDisponible).trim().toLocaleLowerCase('es') ===
+      String(idioma || '').trim().toLocaleLowerCase('es')
+  );
+
+  if (!idiomaSeleccionado) {
     const error = new Error('El idioma seleccionado no está disponible para este tour');
     error.statusCode = 400;
     throw error;
@@ -264,7 +274,7 @@ const crearReserva = async (datosReserva) => {
         documento_cliente: documento_cliente || null,
         fecha_reserva,
         cantidad_personas: cantidadPersonasNumero,
-        idioma: idioma || 'Español',
+        idioma: idiomaSeleccionado,
         valor_total,
         extras_seleccionados: extrasSeleccionados,
         estado_reserva: 'pendiente',
