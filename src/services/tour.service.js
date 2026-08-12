@@ -18,6 +18,16 @@ const { traducirTour } = require('./traduccion.service');
 const { normalizarHorariosTour, validarRangosNoDisponibles } = require('../utils/disponibilidadReserva');
 const { validarCategoriaTour } = require('../constants/categoriasTour');
 
+const MAXIMO_IMAGENES_POR_TOUR = 10;
+
+const validarCantidadImagenes = (cantidad) => {
+  if (cantidad > MAXIMO_IMAGENES_POR_TOUR) {
+    const error = new Error(`Solo se permiten hasta ${MAXIMO_IMAGENES_POR_TOUR} imágenes por tour`);
+    error.statusCode = 400;
+    throw error;
+  }
+};
+
 
 
 /**
@@ -276,6 +286,8 @@ const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
       extras = []
     } = datosTour;
 
+    validarCantidadImagenes(imagenes.length + archivosImagenes.length);
+
     /**
      * Se crea primero el registro principal del tour.
      */
@@ -456,6 +468,12 @@ const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
  */
 const listarTours = async (idioma = 'es', incluirInactivos = false) => {
   const tours = await Tour.findAll({
+    attributes: {
+      include: [[
+        sequelize.literal('(SELECT COUNT(*) FROM reservas AS reservas_tour WHERE reservas_tour.id_tour = Tour.id)'),
+        'total_reservas'
+      ]]
+    },
     where: incluirInactivos
       ? {}
       : { estado_publicacion: 'activo' },
@@ -622,6 +640,12 @@ const actualizarTourCompleto = async (id, datosTour, archivosImagenes = []) => {
       }
     }
 
+    const cantidadImagenesConservadas = await ImagenTour.count({
+      where: { id_tour: id },
+      transaction: transaccion
+    });
+    validarCantidadImagenes(cantidadImagenesConservadas + archivosImagenes.length);
+
     /**
      * Sube y registra exclusivamente los archivos nuevos. La metadata conserva
      * la portada elegida en el formulario sin reenviar imágenes existentes.
@@ -633,10 +657,6 @@ const actualizarTourCompleto = async (id, datosTour, archivosImagenes = []) => {
       const metadataNuevas = Array.isArray(imagenes_nuevas_metadata)
         ? imagenes_nuevas_metadata
         : [];
-      const cantidadImagenesConservadas = await ImagenTour.count({
-        where: { id_tour: id },
-        transaction: transaccion
-      });
       const existePortadaNueva = metadataNuevas.some((imagen) =>
         Boolean(imagen.es_portada)
       );
