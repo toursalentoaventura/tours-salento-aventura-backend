@@ -195,7 +195,7 @@ const enviarCorreoPagoAprobadoCliente = async (reserva) => {
       {
         correo:
           process.env.MAILERSEND_ADMIN_EMAIL ||
-          'tourssalentoaventura@gmail.com',
+          'reservas@tourssalentoaventura.com',
         nombre: 'Tours Salento Aventura'
       }
     ],

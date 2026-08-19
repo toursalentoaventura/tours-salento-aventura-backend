@@ -10,6 +10,7 @@ const CATEGORIAS_TOUR = Object.freeze([
   'Valle de Cocora',
   'Café y Cacao',
   'Valle de Cocora Tours Mixtos',
+  'Tours compartidos',
   'Cascadas y Termales',
   'Volcanes',
   'Cabalgatas Valle de Cocora',
