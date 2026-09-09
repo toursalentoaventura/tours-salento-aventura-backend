@@ -48,6 +48,13 @@ const Tour = sequelize.define('Tour', {
     allowNull: false
   },
 
+  minimo_personas: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 1,
+    validate: { min: 1 }
+  },
+
   ubicacion_destino: {
     type: DataTypes.STRING(150),
     allowNull: true

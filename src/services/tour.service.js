@@ -272,6 +272,7 @@ const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
       idiomas,
       estado_publicacion,
       duracion,
+      minimo_personas,
       maximo_personas,
       ubicacion_destino,
       punto_encuentro,
@@ -294,6 +295,16 @@ const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
     validarRangosNoDisponibles(fechas_no_disponibles);
     const horariosNormalizados = normalizarHorariosTour(horarios);
     const categoriaValidada = validarCategoriaTour(categoria);
+    const minimoPersonas = Number(minimo_personas);
+    const maximoPersonas = Number(maximo_personas);
+
+    if (!Number.isInteger(minimoPersonas) || minimoPersonas < 1 ||
+        !Number.isInteger(maximoPersonas) || maximoPersonas < minimoPersonas) {
+      throw Object.assign(
+        new Error('La cantidad mínima debe ser un entero positivo y no superar la cantidad máxima'),
+        { statusCode: 400 }
+      );
+    }
 
     const nuevoTour = await Tour.create(
       {
@@ -304,7 +315,8 @@ const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
         idiomas: idiomas || ['Español'],
         estado_publicacion: estado_publicacion || 'activo',
         duracion,
-        maximo_personas,
+        minimo_personas: minimoPersonas,
+        maximo_personas: maximoPersonas,
         ubicacion_destino,
         punto_encuentro,
         descripcion
@@ -557,6 +569,7 @@ const actualizarTourCompleto = async (id, datosTour, archivosImagenes = []) => {
       'idiomas',
       'estado_publicacion',
       'duracion',
+      'minimo_personas',
       'maximo_personas',
       'ubicacion_destino',
       'punto_encuentro',
@@ -564,6 +577,16 @@ const actualizarTourCompleto = async (id, datosTour, archivosImagenes = []) => {
     ];
 
     const datosActualizados = {};
+    const minimoFinal = Number(datosTour.minimo_personas ?? tour.minimo_personas ?? 1);
+    const maximoFinal = Number(datosTour.maximo_personas ?? tour.maximo_personas);
+
+    if (!Number.isInteger(minimoFinal) || minimoFinal < 1 ||
+        !Number.isInteger(maximoFinal) || maximoFinal < minimoFinal) {
+      throw Object.assign(
+        new Error('La cantidad mínima debe ser un entero positivo y no superar la cantidad máxima'),
+        { statusCode: 400 }
+      );
+    }
 
     camposPermitidos.forEach((campo) => {
       if (datosTour[campo] !== undefined) {

@@ -44,7 +44,7 @@ const crearReserva = async (datosReserva) => {
     throw Object.assign(new Error('La fecha de reserva debe tener formato YYYY-MM-DD.'), { statusCode: 422 });
   }
 
-  if (!cantidadPersonasNumero || cantidadPersonasNumero <= 0) {
+  if (!Number.isInteger(cantidadPersonasNumero) || cantidadPersonasNumero <= 0) {
     const error = new Error('La cantidad de personas debe ser válida');
     error.statusCode = 400;
     throw error;
@@ -96,6 +96,13 @@ const crearReserva = async (datosReserva) => {
     } catch {
       idiomasTour = [];
     }
+  }
+
+  const minimoPersonas = Math.max(1, Number(tour.minimo_personas) || 1);
+  if (cantidadPersonasNumero < minimoPersonas) {
+    const error = new Error(`Este tour requiere una cantidad mínima de ${minimoPersonas} personas`);
+    error.statusCode = 400;
+    throw error;
   }
 
   if (idiomasTour.length === 0) {

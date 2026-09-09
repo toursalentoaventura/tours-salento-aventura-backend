@@ -57,6 +57,7 @@ const crearTour = async (req, res) => {
       categoria,
       tipo_tour,
       duracion,
+      minimo_personas,
       maximo_personas,
       descripcion
     } = req.body;
@@ -64,14 +65,15 @@ const crearTour = async (req, res) => {
     /**
      * Validación básica de campos obligatorios.
      */
-    if (!nombre || !categoria || !tipo_tour || !duracion || !maximo_personas || !descripcion) {
+    if (!nombre || !categoria || !tipo_tour || !duracion || !minimo_personas || !maximo_personas || !descripcion) {
       return res.status(400).json({
         ok: false,
         message: 'Faltan campos obligatorios del tour'
       });
     }
-    const datosTour = {
+      const datosTour = {
         ...req.body,
+        minimo_personas: Number(req.body.minimo_personas),
         maximo_personas: Number(req.body.maximo_personas),
 
         idiomas: normalizarIdiomas(req.body.idiomas),
@@ -221,6 +223,10 @@ const actualizarTour = async (req, res) => {
 
     if (req.body.maximo_personas !== undefined) {
       datosTour.maximo_personas = Number(req.body.maximo_personas);
+    }
+
+    if (req.body.minimo_personas !== undefined) {
+      datosTour.minimo_personas = Number(req.body.minimo_personas);
     }
 
     if (req.body.idiomas !== undefined) {

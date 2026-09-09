@@ -11,6 +11,7 @@ const CATEGORIAS_ESPERADAS = [
   'Valle de Cocora',
   'Café y Cacao',
   'Valle de Cocora Tours Mixtos',
+  'Tours compartidos',
   'Cascadas y Termales',
   'Volcanes',
   'Cabalgatas Valle de Cocora',
@@ -23,9 +24,9 @@ const CATEGORIAS_ESPERADAS = [
   'Tour Futuro 4'
 ];
 
-test('expone exactamente las 14 categorías oficiales sin duplicados', () => {
+test('expone exactamente las 15 categorías oficiales sin duplicados', () => {
   assert.deepEqual(CATEGORIAS_TOUR, CATEGORIAS_ESPERADAS);
-  assert.equal(new Set(CATEGORIAS_TOUR).size, 14);
+  assert.equal(new Set(CATEGORIAS_TOUR).size, 15);
 });
 
 test('acepta una categoría oficial y normaliza espacios externos', () => {
