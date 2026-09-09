@@ -48,7 +48,7 @@ const startServer = async () => {
      * Esto es más seguro para evitar cambios inesperados
      * en la estructura de la base de datos.
      */
-    await sequelize.sync({ alter: true });
+    await sequelize.sync({ alter: false  });
 
     console.log('Tablas sincronizadas correctamente');
 
