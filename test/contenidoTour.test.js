@@ -8,7 +8,7 @@ test('preserva todos los formatos permitidos y es idempotente', () => {
 });
 test('elimina XSS, atributos y formatos no autorizados', () => {
   const clean = sanitizarContenidoTour('<p style="color:red" onclick="alert(1)">Hola</p><script>alert(1)</script><iframe srcdoc="x">x</iframe><img src=x onerror=alert(1)><a href="javascript:alert(1)">enlace</a><svg onload="alert(1)"></svg><video src="x"></video><table><tr><td>dato</td></tr></table>');
-  assert.equal(clean, '<p>Hola</p>enlacedato');
+  assert.equal(clean, '<p>Hola</p><a>enlace</a>dato');
 });
 test('conserva el texto antiguo y sus saltos sin interpretar caracteres especiales', () => {
   assert.equal(sanitizarContenidoTour('A & B\n2 < 3'), '<p>A &amp; B<br>2 &lt; 3</p>');
@@ -28,7 +28,15 @@ test('filtra todos los campos largos sin modificar precios ni otros datos', () =
 });
 
 test('es idempotente también después de quitar etiquetas prohibidas', () => {
-  const clean = sanitizarContenidoTour('<a href="https://example.com">A &amp; B</a>');
-  assert.equal(clean, '<p>A &amp; B</p>');
+  const clean = sanitizarContenidoTour('<a href="https://example.com/">A &amp; B</a>');
+  assert.equal(clean, '<a href="https://example.com/">A &amp; B</a>');
   assert.equal(sanitizarContenidoTour(clean), clean);
+});
+
+test('conserva H1 y enlaces HTTP(S), eliminando atributos peligrosos', () => {
+  const html = '<h1>Título principal</h1><p><a href="https://example.com/ruta" onclick="alert(1)" target="_blank">Sitio</a></p>';
+  assert.equal(sanitizarContenidoTour(html), '<h1>Título principal</h1><p><a href="https://example.com/ruta">Sitio</a></p>');
+  for (const href of ['javascript:alert(1)', 'data:text/html,x', '//example.com', 'javascript&#58;alert(1)', 'java&#10;script:alert(1)', '/ruta', 'https://usuario:clave@example.com']) {
+    assert.equal(sanitizarContenidoTour(`<p><a href="${href}">Texto</a></p>`), '<p><a>Texto</a></p>');
+  }
 });
