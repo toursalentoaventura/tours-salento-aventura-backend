@@ -1,3 +1,4 @@
+const { sanitizarTextosTour } = require('../utils/contenidoTour');
 const {
   sequelize,
   Tour,
@@ -97,7 +98,7 @@ const generarTraduccionesTour = async (tour) => {
       await TraduccionTour.create({
         id_tour: tour.id,
         idioma,
-        contenido: contenidoTraducido
+        contenido: sanitizarTextosTour(contenidoTraducido)
       });
     }
   } catch (error) {
@@ -261,6 +262,7 @@ const construirRelacionesTour = ({
 ];
 
 const crearTourCompleto = async (datosTour, archivosImagenes = []) => {
+  datosTour = sanitizarTextosTour(datosTour);
   const transaccion = await sequelize.transaction();
 
   try {
@@ -528,6 +530,7 @@ const obtenerTourPorId = async (id, idioma = 'es', incluirInactivos = false) => 
  * itinerario, horarios o fechas no disponibles, se reemplazan por los nuevos.
  */
 const actualizarTourCompleto = async (id, datosTour, archivosImagenes = []) => {
+  datosTour = sanitizarTextosTour(datosTour);
   const transaccion = await sequelize.transaction();
   let imagenesNuevasCloudinary = [];
   let imagenesRetiradas = [];

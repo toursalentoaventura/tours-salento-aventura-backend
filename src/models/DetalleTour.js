@@ -19,7 +19,7 @@ const DetalleTour = sequelize.define('DetalleTour', {
   },
 
   descripcion: {
-    type: DataTypes.STRING(255),
+    type: DataTypes.TEXT,
     allowNull: false
   }
 }, {
