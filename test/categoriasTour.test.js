@@ -17,16 +17,14 @@ const CATEGORIAS_ESPERADAS = [
   'Cabalgatas Valle de Cocora',
   'Cabalgatas Salento',
   'Hospedaje',
-  'Otros Tours',
   'Tour Futuro 1',
   'Tour Futuro 2',
-  'Tour Futuro 3',
-  'Tour Futuro 4'
+  'Otros Tours'
 ];
 
-test('expone exactamente las 15 categorías oficiales sin duplicados', () => {
+test('expone exactamente las 13 categorías oficiales sin duplicados', () => {
   assert.deepEqual(CATEGORIAS_TOUR, CATEGORIAS_ESPERADAS);
-  assert.equal(new Set(CATEGORIAS_TOUR).size, 15);
+  assert.equal(new Set(CATEGORIAS_TOUR).size, 13);
 });
 
 test('acepta una categoría oficial y normaliza espacios externos', () => {
@@ -34,7 +32,7 @@ test('acepta una categoría oficial y normaliza espacios externos', () => {
 });
 
 test('rechaza categorías antiguas o desconocidas con estado 400', () => {
-  for (const categoria of ['Caminatas', 'Aventura', 'Categoría inventada', '']) {
+  for (const categoria of ['Caminatas', 'Aventura', 'Categoría inventada', '', 'Tour Futuro 3', 'Tour Futuro 4']) {
     assert.throws(
       () => validarCategoriaTour(categoria),
       (error) =>

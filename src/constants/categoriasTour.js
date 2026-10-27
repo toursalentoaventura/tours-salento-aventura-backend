@@ -16,11 +16,9 @@ const CATEGORIAS_TOUR = Object.freeze([
   'Cabalgatas Valle de Cocora',
   'Cabalgatas Salento',
   'Hospedaje',
-  'Otros Tours',
   'Tour Futuro 1',
   'Tour Futuro 2',
-  'Tour Futuro 3',
-  'Tour Futuro 4'
+  'Otros Tours'
 ]);
 
 /**
